@@ -39,6 +39,7 @@ export default class AddQueryToQueue {
     shouldSplitChapters,
     skipCurrentTrack,
     interaction,
+    insertAtPosition,
   }: {
     query: string;
     addToFrontOfQueue: boolean;
@@ -46,6 +47,7 @@ export default class AddQueryToQueue {
     shouldSplitChapters: boolean;
     skipCurrentTrack: boolean;
     interaction: ChatInputCommandInteraction;
+    insertAtPosition?: number;
   }): Promise<void> {
     const guildId = interaction.guild!.id;
     const player = this.playerManager.get(guildId);
@@ -73,12 +75,15 @@ export default class AddQueryToQueue {
       newSongs = await Promise.all(newSongs.map(this.skipNonMusicSegments.bind(this)));
     }
 
-    newSongs.forEach(song => {
+    newSongs.forEach((song, index) => {
       player.add({
         ...song,
         addedInChannelId: interaction.channel!.id,
         requestedBy: interaction.member!.user.id,
-      }, {immediate: addToFrontOfQueue ?? false});
+      }, {
+        immediate: addToFrontOfQueue ?? false,
+        insertAt: insertAtPosition !== undefined ? insertAtPosition + index : undefined,
+      });
     });
 
     const firstSong = newSongs[0];

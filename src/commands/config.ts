@@ -82,6 +82,13 @@ export default class implements Command {
         .setMaxValue(30)
         .setRequired(true)))
     .addSubcommand(subcommand => subcommand
+      .setName('set-prefix')
+      .setDescription('Sets the prefix for prefix commands.')
+      .addStringOption(option => option
+        .setName('prefix')
+        .setDescription('The new prefix')
+        .setRequired(true)))
+    .addSubcommand(subcommand => subcommand
       .setName('get')
       .setDescription('show all settings'));
 
@@ -213,6 +220,23 @@ export default class implements Command {
         break;
       }
 
+      case 'set-prefix': {
+        const newPrefix = interaction.options.getString('prefix')!;
+
+        await prisma.setting.update({
+          where: {
+            guildId: interaction.guild!.id,
+          },
+          data: {
+            prefix: newPrefix,
+          },
+        });
+
+        await interaction.reply(`👍 prefix updated to \`${newPrefix}\``);
+
+        break;
+      }
+
       case 'set-reduce-vol-when-voice': {
         const value = interaction.options.getBoolean('value')!;
 
@@ -263,6 +287,7 @@ export default class implements Command {
           'Default Volume': config.defaultVolume,
           'Default queue page size': config.defaultQueuePageSize,
           'Reduce volume when people speak': config.turnDownVolumeWhenPeopleSpeak ? 'yes' : 'no',
+          'Prefix': config.prefix,
         };
 
         let description = '';
@@ -279,6 +304,57 @@ export default class implements Command {
 
       default:
         throw new Error('unknown subcommand');
+    }
+  }
+
+  public async executePrefix(message: Message, args: string[]): Promise<void> {
+    if (args[0] === 'set-prefix') {
+      const newPrefix = args[1];
+
+      if (!newPrefix) {
+        await message.channel.send(errorMsg('Please provide a prefix.'));
+        return;
+      }
+
+      await prisma.setting.update({
+        where: {
+          guildId: message.guild!.id,
+        },
+        data: {
+          prefix: newPrefix,
+        },
+      });
+
+      await message.channel.send(`Prefix set to \`${newPrefix}\``);
+    } else if (args[0] === 'get') {
+      const embed = new EmbedBuilder().setTitle('Config');
+
+      const config = await getGuildSettings(message.guild!.id);
+
+      const settingsToShow = {
+        'Playlist Limit': config.playlistLimit,
+        'Wait before leaving after queue empty': config.secondsToWaitAfterQueueEmpties === 0
+          ? 'never leave'
+          : `${config.secondsToWaitAfterQueueEmpties}s`,
+        'Leave if there are no listeners': config.leaveIfNoListeners ? 'yes' : 'no',
+        'Auto announce next song in queue': config.autoAnnounceNextSong ? 'yes' : 'no',
+        'Add to queue reponses show for requester only': config.autoAnnounceNextSong ? 'yes' : 'no',
+        'Default Volume': config.defaultVolume,
+        'Default queue page size': config.defaultQueuePageSize,
+        'Reduce volume when people speak': config.turnDownVolumeWhenPeopleSpeak ? 'yes' : 'no',
+        'Prefix': config.prefix,
+      };
+
+      let description = '';
+      for (const [key, value] of Object.entries(settingsToShow)) {
+        description += `**${key}**: ${value}\n`;
+      }
+
+      embed.setDescription(description);
+
+      await message.channel.send({embeds: [embed]});
+    } else {
+      await message.channel.send(errorMsg('unknown subcommand'));
     }
   }
 }

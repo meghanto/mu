@@ -1,0 +1,17 @@
+version: '3.8'
+services:
+  muse:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      target: development
+    image: muse-bot:dev
+    env_file:
+      - .env.dev
+    volumes:
+      - ./:/usr/src/app
+
+    working_dir: /usr/src/app
+
+    command: npm run dev
+

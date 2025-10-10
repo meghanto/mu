@@ -1,7 +1,7 @@
 import {VoiceChannel, Snowflake} from 'discord.js';
 import {Readable} from 'stream';
 import hasha from 'hasha';
-import ytdl, {videoFormat} from '@distube/ytdl-core';
+import {spawn} from 'child_process';
 import {WriteStream} from 'fs-capacitor';
 import ffmpeg from 'fluent-ffmpeg';
 import shuffle from 'array-shuffle';
@@ -21,6 +21,10 @@ import debug from '../utils/debug.js';
 import {getGuildSettings} from '../utils/get-guild-settings.js';
 import {buildPlayingMessageEmbed} from '../utils/build-embed.js';
 import {Setting} from '@prisma/client';
+import path from 'path';
+import fs from 'fs';
+
+import {ONE_MINUTE_IN_SECONDS} from '../utils/constants.js'; // Add this import
 
 export enum MediaSource {
   Youtube,
@@ -48,6 +52,12 @@ export interface QueuedSong extends SongMetadata {
   requestedBy: string;
 }
 
+export interface FullPlaylist {
+  songs: SongMetadata[];
+  addedCount: number;
+  timestamp: number; // Unix timestamp for expiration
+}
+
 export enum STATUS {
   PLAYING,
   PAUSED,
@@ -58,7 +68,34 @@ export interface PlayerEvents {
   statusChange: (oldStatus: STATUS, newStatus: STATUS) => void;
 }
 
-type YTDLVideoFormat = videoFormat & {loudnessDb?: number};
+interface VideoFormat {
+  url: string;
+  itag: string | number;
+  codecs?: string;
+  container?: string;
+  audioSampleRate?: string;
+  averageBitrate?: number;
+  bitrate?: string | number;
+  isLive?: boolean;
+  loudnessDb?: number;
+}
+
+interface YtDlpFormat {
+  url?: string;
+  format_id?: string;
+  acodec?: string;
+  vcodec?: string;
+  ext?: string;
+  asr?: number;
+  abr?: number;
+  tbr?: number;
+}
+
+interface YtDlpResponse {
+  formats?: YtDlpFormat[];
+  is_live?: boolean;
+  duration?: number;
+}
 
 export const DEFAULT_VOLUME = 100;
 
@@ -84,10 +121,52 @@ export default class {
   private disconnectTimer: NodeJS.Timeout | null = null;
 
   private readonly channelToSpeakingUsers: Map<string, Set<string>> = new Map();
+  private fullPlaylists: Map<string, FullPlaylist> = new Map(); // New property
 
   constructor(fileCache: FileCacheProvider, guildId: string) {
     this.fileCache = fileCache;
     this.guildId = guildId;
+  }
+
+  storeFullPlaylist(playlistId: string, songs: SongMetadata[]): void {
+    this.fullPlaylists.set(playlistId, {
+      songs,
+      addedCount: 0,
+      timestamp: Date.now(),
+    });
+  }
+
+  getStoredPlaylist(playlistId: string): FullPlaylist | undefined {
+    const playlist = this.fullPlaylists.get(playlistId);
+    if (playlist && Date.now() - playlist.timestamp < 15 * ONE_MINUTE_IN_SECONDS) { // 15 minutes expiration
+      return playlist;
+    }
+    this.fullPlaylists.delete(playlistId); // Clear expired
+    return undefined;
+  }
+
+  addNextBatch(playlistId: string, count: number): SongMetadata[] {
+    const storedPlaylist = this.getStoredPlaylist(playlistId);
+    if (!storedPlaylist) {
+      throw new Error('No stored playlist found or it has expired.');
+    }
+
+    const startIndex = storedPlaylist.addedCount;
+    const endIndex = Math.min(startIndex + count, storedPlaylist.songs.length);
+    const songsToAdd = storedPlaylist.songs.slice(startIndex, endIndex);
+
+    if (songsToAdd.length === 0) {
+      throw new Error('No more songs to add from this playlist.');
+    }
+
+    // Add songs to the main queue
+    songsToAdd.forEach(song => this.add(song));
+
+    storedPlaylist.addedCount = endIndex;
+    storedPlaylist.timestamp = Date.now(); // Refresh timestamp
+    this.fullPlaylists.set(playlistId, storedPlaylist); // Update map
+
+    return songsToAdd;
   }
 
   async connect(channel: VoiceChannel): Promise<void> {
@@ -99,7 +178,7 @@ export default class {
     this.voiceConnection = joinVoiceChannel({
       channelId: channel.id,
       guildId: channel.guild.id,
-      selfDeaf: false,
+      selfDeaf: true,
       adapterCreator: channel.guild.voiceAdapterCreator as DiscordGatewayAdapterCreator,
     });
 
@@ -161,13 +240,11 @@ export default class {
     }
 
     let realPositionSeconds = positionSeconds;
-    let to: number | undefined;
     if (currentSong.offset !== undefined) {
       realPositionSeconds += currentSong.offset;
-      to = currentSong.length + currentSong.offset;
     }
 
-    const stream = await this.getStream(currentSong, {seek: realPositionSeconds, to});
+    const stream = await this.getFfmpegInput(currentSong, {seek: realPositionSeconds});
     this.audioPlayer = createAudioPlayer({
       behaviors: {
         // Needs to be somewhat high for livestreams
@@ -224,13 +301,11 @@ export default class {
 
     try {
       let positionSeconds: number | undefined;
-      let to: number | undefined;
       if (currentSong.offset !== undefined) {
         positionSeconds = currentSong.offset;
-        to = currentSong.length + currentSong.offset;
       }
 
-      const stream = await this.getStream(currentSong, {seek: positionSeconds, to});
+      const stream = await this.getFfmpegInput(currentSong, {seek: positionSeconds});
       this.audioPlayer = createAudioPlayer({
         behaviors: {
           // Needs to be somewhat high for livestreams
@@ -408,6 +483,30 @@ export default class {
     return null;
   }
 
+  getSongAt(index: number): QueuedSong | null {
+    if (index > 0 && index <= this.queue.length) {
+      return this.queue[index - 1];
+    }
+    return null;
+  }
+
+  getFullQueueLength(): number {
+    return this.queue.length;
+  }
+
+  async jumpTo(position: number): Promise<void> {
+    if (position < 1 || position > this.queue.length) {
+      throw new Error('Position is out of bounds.');
+    }
+
+    this.queuePosition = position - 1;
+    this.positionInSeconds = 0; // Reset song position when jumping
+
+    if (this.status !== STATUS.PLAYING) {
+      await this.play();
+    }
+  }
+
   /**
    * Returns queue, not including the current song.
    * @returns {QueuedSong[]}
@@ -416,21 +515,41 @@ export default class {
     return this.queue.slice(this.queuePosition + 1);
   }
 
-  add(song: QueuedSong, {immediate = false} = {}): void {
-    if (song.playlist || !immediate) {
+  add(song: QueuedSong, {immediate = false, insertAt}: {immediate?: boolean; insertAt?: number} = {}): void {
+    if (insertAt !== undefined) {
+      // Insert at specific position (1-based index)
+      this.queue.splice(insertAt - 1, 0, song);
+    } else if (song.playlist || !immediate) {
       // Add to end of queue
       this.queue.push(song);
     } else {
-      // Add as the next song to be played
-      const insertAt = this.queuePosition + 1;
-      this.queue = [...this.queue.slice(0, insertAt), song, ...this.queue.slice(insertAt)];
+      // Add as the next song to be played (immediate = true)
+      const insertIndex = this.queuePosition + 1;
+      this.queue.splice(insertIndex, 0, song);
     }
   }
 
-  shuffle(): void {
-    const shuffledSongs = shuffle(this.queue.slice(this.queuePosition + 1));
+  addMany(songs: QueuedSong[]): void {
+    this.queue.push(...songs);
+  }
 
-    this.queue = [...this.queue.slice(0, this.queuePosition + 1), ...shuffledSongs];
+  shuffle(upcomingOnly = false): void {
+    if (this.isQueueEmpty()) {
+      return; // No need to shuffle an empty queue
+    }
+
+    if (upcomingOnly) {
+      const upcomingSongs = this.queue.slice(this.queuePosition + 1);
+      const shuffledUpcoming = shuffle(upcomingSongs);
+      this.queue = [...this.queue.slice(0, this.queuePosition + 1), ...shuffledUpcoming];
+    } else {
+      // Shuffle entire queue excluding the currently playing song
+      const currentSong = this.queue[this.queuePosition];
+      const restOfQueue = this.queue.slice(this.queuePosition + 1);
+      const shuffledRest = shuffle(restOfQueue);
+      this.queue = [currentSong, ...shuffledRest];
+      this.queuePosition = 0; // Reset queue position to the start of the shuffled queue
+    }
   }
 
   clear(): void {
@@ -490,97 +609,142 @@ export default class {
     return this.volume ?? this.defaultVolume;
   }
 
+  private async getVideoInfoWithYtDlp(url: string): Promise<YtDlpResponse> {
+    return new Promise((resolve, reject) => {
+      const ytDlp = spawn('yt-dlp', ['--dump-json', '--no-warnings', url]);
+
+      let stdout = '';
+      let stderr = '';
+
+      ytDlp.stdout.on('data', (data: Buffer) => {
+        stdout += data.toString();
+      });
+
+      ytDlp.stderr.on('data', (data: Buffer) => {
+        stderr += data.toString();
+      });
+
+      ytDlp.on('close', (code: number) => {
+        if (code === 0) {
+          try {
+            const info = JSON.parse(stdout) as YtDlpResponse;
+            resolve(info);
+          } catch (parseError: unknown) {
+            reject(new Error(`Failed to parse yt-dlp JSON output: ${String(parseError)}`));
+          }
+        } else {
+          reject(new Error(`yt-dlp failed with code ${code}: ${stderr}`));
+        }
+      });
+
+      ytDlp.on('error', (error: Error) => {
+        reject(new Error(`Failed to spawn yt-dlp: ${error.message}`));
+      });
+    });
+  }
+
+  private extractVideoId(url: string): string {
+    const regex = /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/;
+    const match = regex.exec(url);
+    return match?.[1] ?? url;
+  }
+
+  private async getYouTubeInfo(url: string): Promise<{ formats: VideoFormat[]; isLive: boolean; lengthSeconds: string; }> {
+    const videoId = this.extractVideoId(url);
+
+    // Construct full YouTube URL if we only have a video ID
+    const fullUrl = url.includes('youtube.com') || url.includes('youtu.be') ? url : `https://www.youtube.com/watch?v=${videoId}`;
+
+    const info = await this.getVideoInfoWithYtDlp(fullUrl);
+
+    const formats: VideoFormat[] = (info.formats ?? []).map((format: YtDlpFormat) => ({
+      url: format.url ?? '',
+      itag: format.format_id ?? '',
+      codecs: format.acodec && format.acodec !== 'none' ? format.acodec : format.vcodec ?? '',
+      container: format.ext ?? '',
+      audioSampleRate: format.asr?.toString(),
+      averageBitrate: format.abr,
+      bitrate: format.tbr,
+      isLive: info.is_live ?? false,
+    }));
+
+    return {
+      formats,
+      isLive: info.is_live ?? false,
+      lengthSeconds: info.duration?.toString() ?? '0',
+    };
+  }
+
   private getHashForCache(url: string): string {
     return hasha(url);
   }
 
-  private async getStream(song: QueuedSong, options: {seek?: number; to?: number} = {}): Promise<Readable> {
-    if (this.status === STATUS.PLAYING) {
-      this.audioPlayer?.stop();
-    } else if (this.status === STATUS.PAUSED) {
-      this.audioPlayer?.stop(true);
+  private async getFfmpegInput(song: QueuedSong, options?: {seek?: number}): Promise<string | Readable> {
+    const hash = this.getHashForCache(song.url);
+    const cachedPath = path.join(this.fileCache.cacheDir, hash);
+
+    if (fs.existsSync(cachedPath)) {
+      return cachedPath;
     }
 
-    if (song.source === MediaSource.HLS) {
-      return this.createReadStream({url: song.url, cacheKey: song.url});
-    }
+    let ffmpegInput: string | Readable | null = null;
 
-    let ffmpegInput: string | null;
-    const ffmpegInputOptions: string[] = [];
-    let shouldCacheVideo = false;
+    // Not yet cached, must download
+    const info = await this.getYouTubeInfo(song.url);
 
-    let format: YTDLVideoFormat | undefined;
+    const {formats} = info;
 
-    ffmpegInput = await this.fileCache.getPathFor(this.getHashForCache(song.url));
+    // Look for the ideal format (opus codec, webm container, 48kHz)
+    const filter = (format: VideoFormat): boolean => format.codecs === 'opus' && format.container === 'webm' && format.audioSampleRate !== undefined && parseInt(format.audioSampleRate, 10) === 48000 && Boolean(format.url);
 
-    if (!ffmpegInput) {
-      // Not yet cached, must download
-      const info = await ytdl.getInfo(song.url);
+    let format = formats.find(filter);
 
-      const formats = info.formats as YTDLVideoFormat[];
-
-      const filter = (format: ytdl.videoFormat): boolean => format.codecs === 'opus' && format.container === 'webm' && format.audioSampleRate !== undefined && parseInt(format.audioSampleRate, 10) === 48000;
-
-      format = formats.find(filter);
-
-      const nextBestFormat = (formats: ytdl.videoFormat[]): ytdl.videoFormat | undefined => {
-        if (formats.length < 1) {
-          return undefined;
-        }
-
-        if (formats[0].isLive) {
-          formats = formats.sort((a, b) => (b as unknown as {audioBitrate: number}).audioBitrate - (a as unknown as {audioBitrate: number}).audioBitrate); // Bad typings
-
-          return formats.find(format => [128, 127, 120, 96, 95, 94, 93].includes(parseInt(format.itag as unknown as string, 10))); // Bad typings
-        }
-
-        formats = formats
-          .filter(format => format.averageBitrate)
-          .sort((a, b) => {
-            if (a && b) {
-              return b.averageBitrate! - a.averageBitrate!;
-            }
-
-            return 0;
-          });
-        return formats.find(format => !format.bitrate) ?? formats[0];
-      };
-
-      if (!format) {
-        format = nextBestFormat(info.formats);
-
-        if (!format) {
-          // If still no format is found, throw
-          throw new Error('Can\'t find suitable format.');
-        }
+    const nextBestFormat = (formats: VideoFormat[]): VideoFormat | undefined => {
+      if (formats.length < 1) {
+        return undefined;
       }
 
-      debug('Using format', format);
+      if (formats[0].isLive) {
+        formats = formats.sort((a, b) => (b.averageBitrate ?? 0) - (a.averageBitrate ?? 0));
 
-      ffmpegInput = format.url;
+        return formats.find(format => [128, 127, 120, 96, 95, 94, 93].includes(parseInt(format.itag as string, 10)));
+      }
 
-      // Don't cache livestreams or long videos
-      const MAX_CACHE_LENGTH_SECONDS = 30 * 60; // 30 minutes
-      shouldCacheVideo = !info.player_response.videoDetails.isLiveContent && parseInt(info.videoDetails.lengthSeconds, 10) < MAX_CACHE_LENGTH_SECONDS && !options.seek;
+      formats = formats
+        .filter(format => format.averageBitrate)
+        .sort((a, b) => {
+          if (a && b) {
+            return b.averageBitrate! - a.averageBitrate!;
+          }
 
-      debug(shouldCacheVideo ? 'Caching video' : 'Not caching video');
+          return 0;
+        });
+      return formats.find(format => !format.bitrate) ?? formats[0];
+    };
 
-      ffmpegInputOptions.push(...[
-        '-reconnect',
-        '1',
-        '-reconnect_streamed',
-        '1',
-        '-reconnect_delay_max',
-        '5',
-      ]);
+    if (!format) {
+      format = nextBestFormat(info.formats);
+
+      if (!format) {
+        // If still no format is found, throw
+        throw new Error('Can\'t find suitable format.');
+      }
     }
+
+    debug('Using format', format);
+
+    ffmpegInput = format.url;
+
+    // Don't cache livestreams or long videos
+    const MAX_CACHE_LENGTH_SECONDS = 30 * 60; // 30 minutes
+    const shouldCacheVideo = !info.isLive && parseInt(info.lengthSeconds, 10) < MAX_CACHE_LENGTH_SECONDS && !options.seek;
+
+    debug(shouldCacheVideo ? 'Caching video' : 'Not caching video');
+
+    const ffmpegInputOptions: string[] = [];
 
     if (options.seek) {
       ffmpegInputOptions.push('-ss', options.seek.toString());
-    }
-
-    if (options.to) {
-      ffmpegInputOptions.push('-to', options.to.toString());
     }
 
     return this.createReadStream({

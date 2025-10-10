@@ -10,3 +10,12 @@ export async function getGuildSettings(guildId: string): Promise<Setting> {
 
   return config;
 }
+
+export async function setGuildSettings(guildId: string, settings: Partial<Setting>): Promise<Setting> {
+  return prisma.setting.update({
+    where: {
+      guildId,
+    },
+    data: settings,
+  });
+}

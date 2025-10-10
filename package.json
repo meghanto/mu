@@ -29,7 +29,8 @@
     "env:set-database-url": "tsx src/scripts/run-with-database-url.ts",
     "release": "release-it",
     "build": "tsc",
-    "postinstall": "patch-package"
+    "postinstall": "patch-package",
+    "docker:start": "npm run prisma:generate && npm run start"
   },
   "devDependencies": {
     "@release-it/keep-a-changelog": "^2.3.0",
@@ -89,9 +90,9 @@
     "@discordjs/opus": "^0.10.0",
     "@discordjs/rest": "1.0.1",
     "@discordjs/voice": "0.18.0",
-    "@distube/ytdl-core": "^4.16.10",
+    "youtubei.js": "^1.4.3",
     "@distube/ytsr": "^2.0.4",
-    "@prisma/client": "4.16.0",
+    "@prisma/client": "5.21.1",
     "@types/libsodium-wrappers": "^0.7.9",
     "array-shuffle": "^3.0.0",
     "debug": "^4.3.3",

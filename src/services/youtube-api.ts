@@ -143,7 +143,10 @@ export default class {
 
     let nextToken: string | undefined;
 
-    while (playlistVideos.length < playlist.contentDetails.itemCount) {
+    // Fetch all items, up to a reasonable hard limit (e.g., 5000 songs) to prevent excessive memory use
+    const HARD_PLAYLIST_FETCH_LIMIT = 5000;
+
+    while (playlistVideos.length < playlist.contentDetails.itemCount && playlistVideos.length < HARD_PLAYLIST_FETCH_LIMIT) {
       const playlistItemsParams = {
         searchParams: {
           part: 'id, contentDetails',

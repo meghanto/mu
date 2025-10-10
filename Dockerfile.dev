@@ -1,0 +1,19 @@
+FROM node:20 AS base
+
+RUN apt-get update && apt-get install -y python3 python3-pip && pip3 install --no-cache-dir --break-system-packages yt-dlp
+
+RUN apt-get update && apt-get install -y ffmpeg
+
+WORKDIR /usr/src/app
+
+# Install dependencies
+COPY package*.json ./
+COPY yarn.lock ./
+RUN yarn install
+
+# Bind-mount code; do not copy sources here
+FROM base AS development
+
+ENV PATH /usr/src/app/node_modules/.bin:$PATH
+COPY --from=base /usr/src/app/node_modules /usr/src/app/node_modules
+RUN npm install -g tsx

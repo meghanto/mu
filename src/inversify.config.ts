@@ -38,6 +38,10 @@ import Skip from './commands/skip.js';
 import Stop from './commands/stop.js';
 import Unskip from './commands/unskip.js';
 import Volume from './commands/volume.js';
+import SetPrefixCommand from './commands/set-prefix.js';
+import NextBatchCommand from './commands/next-batch.js';
+import LikeCommand from './commands/like.js';
+
 import ThirdParty from './services/third-party.js';
 import FileCacheProvider from './services/file-cache.js';
 import KeyValueCacheProvider from './services/key-value-cache.js';
@@ -47,6 +51,8 @@ const container = new Container();
 // Intents
 const intents: GatewayIntentBits[] = [];
 intents.push(GatewayIntentBits.Guilds); // To listen for guildCreate event
+intents.push(GatewayIntentBits.GuildMessages); // To listen for messageCreate events in guilds
+intents.push(GatewayIntentBits.MessageContent); // To access message.content for non-bot users
 intents.push(GatewayIntentBits.GuildMessageReactions); // To listen for message reactions (messageReactionAdd event)
 intents.push(GatewayIntentBits.GuildVoiceStates); // To listen for voice state changes (voiceStateUpdate event)
 
@@ -96,6 +102,12 @@ if (config.SPOTIFY_CLIENT_ID !== '' && config.SPOTIFY_CLIENT_SECRET !== '') {
   Stop,
   Unskip,
   Volume,
+  SetPrefixCommand,
+  NextBatchCommand,
+  LikeCommand,
+  PlayLikesCommand,
+  HelpCommand,
+  JumpCommand,
 ].forEach(command => {
   container.bind<Command>(TYPES.Command).to(command).inSingletonScope();
 });

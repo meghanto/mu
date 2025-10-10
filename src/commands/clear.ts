@@ -19,6 +19,31 @@ export default class implements Command {
     this.playerManager = playerManager;
   }
 
+  public readonly aliases = ['c'];
+
+  public async executePrefix(message: Message, args: string[], prefix: string): Promise<void> {
+    // Clear command doesn't take arguments for prefix commands
+    const mockInteraction: ChatInputCommandInteraction = {
+      guild: message.guild,
+      channel: message.channel,
+      member: message.member,
+      options: {
+        // No options for clear command
+      } as any,
+      deferReply: async (options?: any) => {
+        await message.channel.send('Thinking...');
+      },
+      editReply: async (options: any) => {
+        await message.channel.send(options.content || { embeds: options.embeds });
+      },
+      reply: async (options: any) => {
+        await message.reply(options.content || { embeds: options.embeds });
+      },
+    } as ChatInputCommandInteraction;
+
+    await this.execute(mockInteraction);
+  }
+
   public async execute(interaction: ChatInputCommandInteraction) {
     this.playerManager.get(interaction.guild!.id).clear();
 

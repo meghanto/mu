@@ -1,4 +1,4 @@
-import {Client, Collection, User} from 'discord.js';
+import {Client, Collection, User, Message} from 'discord.js';
 import {inject, injectable} from 'inversify';
 import ora from 'ora';
 import {TYPES} from './types.js';
@@ -10,6 +10,7 @@ import handleVoiceStateUpdate from './events/voice-state-update.js';
 import errorMsg from './utils/error-msg.js';
 import {isUserInVoice} from './utils/channels.js';
 import Config from './services/config.js';
+import {getGuildSettings} from './utils/get-guild-settings.js';
 import {generateDependencyReport} from '@discordjs/voice';
 import {REST} from '@discordjs/rest';
 import {Routes} from 'discord-api-types/v10';
@@ -22,6 +23,10 @@ export default class {
   private readonly shouldRegisterCommandsOnBot: boolean;
   private readonly commandsByName!: Collection<string, Command>;
   private readonly commandsByButtonId!: Collection<string, Command>;
+
+  public get commands(): Collection<string, Command> {
+    return this.commandsByName;
+  }
 
   constructor(@inject(TYPES.Client) client: Client, @inject(TYPES.Config) config: Config) {
     this.client = client;
@@ -110,6 +115,60 @@ export default class {
             await interaction.reply({content: errorMsg(error as Error), ephemeral: true});
           }
         } catch {}
+      }
+    });
+
+    this.client.on('messageCreate', async message => {
+      console.log('Received message:', message.content);
+      if (!message.guild || message.author.bot) {
+        console.log('Message ignored: not in guild or from bot');
+        return;
+      }
+
+      const settings = await getGuildSettings(message.guild.id);
+      const prefix = settings.prefix;
+      console.log('Guild prefix:', prefix);
+
+      if (!message.content.startsWith(prefix)) {
+        console.log('Message does not start with prefix');
+        return;
+      }
+
+      const args = message.content.slice(prefix.length).trim().split(/ +/);
+      const commandName = args.shift()?.toLowerCase();
+      console.log('Parsed commandName:', commandName, 'args:', args);
+
+      if (!commandName) {
+        console.log('No command name found');
+        return;
+      }
+
+      let command: Command | undefined = this.commandsByName.get(commandName);
+      console.log('Attempting to find command by name:', commandName, 'Found:', !!command);
+
+      if (!command) {
+        // Check aliases
+        console.log('Command not found by name, checking aliases...');
+        for (const cmd of this.commandsByName.values()) {
+          if (cmd.aliases?.includes(commandName)) {
+            command = cmd;
+            console.log('Command found by alias:', commandName);
+            break;
+          }
+        }
+      }
+
+      if (!command) {
+        console.log('No command found after checking aliases');
+        return;
+      }
+
+      console.log('Executing command:', commandName);
+      if (command.executePrefix) {
+        await command.executePrefix(message, args, prefix);
+      } else {
+        console.log('Command does not support prefix commands:', commandName);
+        await message.channel.send(errorMsg('This command does not support prefix commands.'));
       }
     });
 

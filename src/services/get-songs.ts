@@ -17,7 +17,7 @@ export default class {
     this.spotifyAPI = spotifyAPI;
   }
 
-  async getSongs(query: string, playlistLimit: number, shouldSplitChapters: boolean): Promise<[SongMetadata[], string]> {
+  async getSongs(query: string, _playlistLimit: number, shouldSplitChapters: boolean): Promise<[SongMetadata[], string]> {
     const newSongs: SongMetadata[] = [];
     let extraMsg = '';
 
@@ -38,6 +38,11 @@ export default class {
         if (url.searchParams.get('list')) {
           // YouTube playlist
           newSongs.push(...await this.youtubePlaylist(url.searchParams.get('list')!, shouldSplitChapters));
+// ... (rest of the getSongs method)
+
+  private async youtubePlaylist(listId: string, shouldSplitChapters: boolean): Promise<SongMetadata[]> {
+    return this.youtubeAPI.getPlaylist(listId, shouldSplitChapters);
+  }
         } else {
           const songs = await this.youtubeVideo(url.href, shouldSplitChapters);
 
@@ -52,15 +57,9 @@ export default class {
           throw new Error('Spotify is not enabled!');
         }
 
-        const [convertedSongs, nSongsNotFound, totalSongs] = await this.spotifySource(query, playlistLimit, shouldSplitChapters);
+        const [convertedSongs, nSongsNotFound, totalSongs] = await this.spotifySource(query, shouldSplitChapters);
 
-        if (totalSongs > playlistLimit) {
-          extraMsg = `a random sample of ${playlistLimit} songs was taken`;
-        }
-
-        if (totalSongs > playlistLimit && nSongsNotFound !== 0) {
-          extraMsg += ' and ';
-        }
+        // extraMsg logic related to playlistLimit removed as limit is now applied at queuing stage
 
         if (nSongsNotFound !== 0) {
           if (nSongsNotFound === 1) {
@@ -110,7 +109,7 @@ export default class {
     return this.youtubeAPI.getPlaylist(listId, shouldSplitChapters);
   }
 
-  private async spotifySource(url: string, playlistLimit: number, shouldSplitChapters: boolean): Promise<[SongMetadata[], number, number]> {
+  private async spotifySource(url: string, shouldSplitChapters: boolean): Promise<[SongMetadata[], number, number]> {
     if (this.spotifyAPI === undefined) {
       return [[], 0, 0];
     }
@@ -119,12 +118,12 @@ export default class {
 
     switch (parsed.type) {
       case 'album': {
-        const [tracks, playlist] = await this.spotifyAPI.getAlbum(url, playlistLimit);
+        const [tracks, playlist] = await this.spotifyAPI.getAlbum(url);
         return this.spotifyToYouTube(tracks, shouldSplitChapters, playlist);
       }
 
       case 'playlist': {
-        const [tracks, playlist] = await this.spotifyAPI.getPlaylist(url, playlistLimit);
+        const [tracks, playlist] = await this.spotifyAPI.getPlaylist(url);
         return this.spotifyToYouTube(tracks, shouldSplitChapters, playlist);
       }
 
@@ -134,8 +133,8 @@ export default class {
       }
 
       case 'artist': {
-        const tracks = await this.spotifyAPI.getArtist(url, playlistLimit);
-        return this.spotifyToYouTube(tracks, shouldSplitChapters);
+        const tracks = await this.spotifyAPI.getArtist(url);
+        return this.spotifyToYouTube(tracks, shouldSplitChapters, playlist);
       }
 
       default: {

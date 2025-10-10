@@ -24,6 +24,36 @@ export default class implements Command {
     this.playerManager = playerManager;
   }
 
+  public readonly aliases = ['s'];
+
+  public async executePrefix(message: Message, args: string[], prefix: string): Promise<void> {
+    const numToSkip = parseInt(args[0], 10) || 1;
+
+    // Create a mock ChatInputCommandInteraction
+    const mockInteraction: ChatInputCommandInteraction = {
+      guild: message.guild,
+      channel: message.channel,
+      member: message.member,
+      options: {
+        getInteger: (name: string) => {
+          if (name === 'number') return numToSkip;
+          return null;
+        },
+      } as any,
+      deferReply: async (options?: any) => {
+        await message.channel.send('Thinking...');
+      },
+      editReply: async (options: any) => {
+        await message.channel.send(options.content || { embeds: options.embeds });
+      },
+      reply: async (options: any) => {
+        await message.reply(options.content || { embeds: options.embeds });
+      },
+    } as ChatInputCommandInteraction;
+
+    await this.execute(mockInteraction);
+  }
+
   public async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     const numToSkip = interaction.options.getInteger('number') ?? 1;
 
