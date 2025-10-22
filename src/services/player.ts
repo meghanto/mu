@@ -1560,14 +1560,36 @@ export default class Player {
       newState.status === AudioPlayerStatus.Idle &&
       this.status === STATUS.PLAYING
     ) {
-      await this.forward(1);
-      // Auto announce the next song if configured to
-      const settings = await getGuildSettings(this.guildId);
-      const { autoAnnounceNextSong } = settings;
-      if (autoAnnounceNextSong && this.currentChannel) {
-        await this.currentChannel.send({
-          embeds: this.getCurrent() ? [buildPlayingMessageEmbed(this)] : [],
+      try {
+        await this.forward(1);
+        // Auto announce the next song if configured to
+        const settings = await getGuildSettings(this.guildId);
+        const { autoAnnounceNextSong } = settings;
+        if (autoAnnounceNextSong && this.currentChannel) {
+          await this.currentChannel.send({
+            embeds: this.getCurrent() ? [buildPlayingMessageEmbed(this)] : [],
+          });
+        }
+      } catch {
+        // This happens when the queue is empty
+        await this.enqueueOperation(() => {
+          this.status = STATUS.IDLE;
+          this.nowPlaying = null;
+          this.stopTrackingPosition();
+          this.audioPlayer?.stop(true);
+          this.markQueueStateDirty();
         });
+
+        const settings = await getGuildSettings(this.guildId);
+        const { secondsToWaitAfterQueueEmpties } = settings;
+
+        if (secondsToWaitAfterQueueEmpties !== 0) {
+          this.disconnectTimer = setTimeout(() => {
+            if (this.status === STATUS.IDLE) {
+              void this.disconnect();
+            }
+          }, secondsToWaitAfterQueueEmpties * 1000);
+        }
       }
     }
   }
