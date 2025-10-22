@@ -1,4 +1,3 @@
-import { inject, injectable } from "inversify";
 import {
   ChatInputCommandInteraction,
   Message,
@@ -6,6 +5,7 @@ import {
   MessagePayload,
 } from "discord.js";
 import { SlashCommandBuilder } from "@discordjs/builders";
+import { inject, injectable } from "inversify";
 import { TYPES } from "../types.js";
 import PlayerManager from "../managers/player.js";
 import Command from "./index.js";
@@ -13,10 +13,10 @@ import Command from "./index.js";
 @injectable()
 export default class implements Command {
   public readonly slashCommand = new SlashCommandBuilder()
-    .setName("clear")
-    .setDescription("clears all songs in queue except currently playing song");
+    .setName("reset-priorities")
+    .setDescription("reset all song priorities in the queue to 1.0 (default)");
 
-  public readonly aliases = ["cl"];
+  public readonly aliases = ["rp", "resetp"];
 
   public requiresVC = true;
 
@@ -27,14 +27,12 @@ export default class implements Command {
   }
 
   public async executePrefix(message: Message): Promise<void> {
-    // Clear command doesn't take arguments for prefix commands
+    // Create a mock ChatInputCommandInteraction
     const mockInteraction: ChatInputCommandInteraction = {
       guild: message.guild,
       channel: message.channel,
       member: message.member,
-      options: {
-        // No options for clear command
-      },
+      options: {},
       deferReply: async () => {
         await message.channel.send("Thinking...");
       },
@@ -63,12 +61,19 @@ export default class implements Command {
     await this.execute(mockInteraction);
   }
 
-  public async execute(interaction: ChatInputCommandInteraction) {
+  public async execute(
+    interaction: ChatInputCommandInteraction,
+  ): Promise<void> {
     const player = await this.playerManager.get(interaction.guild!.id);
-    await player.clear();
+
+    if (player.isQueueEmpty()) {
+      throw new Error("queue is empty");
+    }
+
+    const count = await player.resetPriorities();
 
     await interaction.reply({
-      content: "🗑️ Queue cleared (current song kept)",
+      content: `⚖️ Reset priorities for ${count} song${count === 1 ? "" : "s"} to 1.0`,
       ephemeral: true,
     });
   }

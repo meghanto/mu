@@ -50,3 +50,15 @@ model FavoriteQuery {
 
   @@unique([guildId, name])
 }
+
+model QueueState {
+  guildId           String   @id
+  queue             String   // JSON serialized queue
+  queuePosition     Int      @default(0)
+  nowPlaying        String?  // JSON serialized current song
+  loopCurrentSong   Boolean  @default(false)
+  loopCurrentQueue  Boolean  @default(false)
+  volume            Int?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}

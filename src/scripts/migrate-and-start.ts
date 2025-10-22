@@ -32,7 +32,7 @@ const doesUserHaveExistingDatabase = async () => {
 
 const hasDatabaseBeenMigratedToPrisma = async () => {
   try {
-    await client.$queryRaw`SELECT COUNT(id) FROM _prisma_migrations`;
+    await client.$executeRaw`PRAGMA schema_version`; // SQLite-compatible schema check
   } catch (error: unknown) {
     if (error instanceof Prisma.Prisma.PrismaClientKnownRequestError && error.code === 'P2010') {
       // Table doesn't exist

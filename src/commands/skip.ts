@@ -1,20 +1,25 @@
-import {ChatInputCommandInteraction} from 'discord.js';
-import {TYPES} from '../types.js';
-import {inject, injectable} from 'inversify';
-import PlayerManager from '../managers/player.js';
-import Command from './index.js';
-import {SlashCommandBuilder} from '@discordjs/builders';
-import {buildPlayingMessageEmbed} from '../utils/build-embed.js';
+import { ChatInputCommandInteraction, Message } from "discord.js";
+import { TYPES } from "../types.js";
+import { inject, injectable } from "inversify";
+import PlayerManager from "../managers/player.js";
+import Command from "./index.js";
+import { SlashCommandBuilder } from "@discordjs/builders";
+import { buildPlayingMessageEmbed } from "../utils/build-embed.js";
+import { createMockInteraction } from "../utils/mock-interaction.js";
 
 @injectable()
 export default class implements Command {
   public readonly slashCommand = new SlashCommandBuilder()
-    .setName('skip')
-    .setDescription('skip the next songs')
-    .addIntegerOption(option => option
-      .setName('number')
-      .setDescription('number of songs to skip [default: 1]')
-      .setRequired(false));
+    .setName("skip")
+    .setDescription("skip the next songs")
+    .addIntegerOption((option) =>
+      option
+        .setName("number")
+        .setDescription("number of songs to skip [default: 1]")
+        .setRequired(false),
+    );
+
+  public readonly aliases = ["s", "next"];
 
   public requiresVC = true;
 
@@ -24,53 +29,37 @@ export default class implements Command {
     this.playerManager = playerManager;
   }
 
-  public readonly aliases = ['s'];
-
-  public async executePrefix(message: Message, args: string[], prefix: string): Promise<void> {
+  public async executePrefix(message: Message, args: string[]): Promise<void> {
     const numToSkip = parseInt(args[0], 10) || 1;
 
-    // Create a mock ChatInputCommandInteraction
-    const mockInteraction: ChatInputCommandInteraction = {
-      guild: message.guild,
-      channel: message.channel,
-      member: message.member,
+    const mockInteraction = createMockInteraction(message, {
       options: {
-        getInteger: (name: string) => {
-          if (name === 'number') return numToSkip;
-          return null;
-        },
-      } as any,
-      deferReply: async (options?: any) => {
-        await message.channel.send('Thinking...');
+        getInteger: (name: string) => (name === "number" ? numToSkip : null),
       },
-      editReply: async (options: any) => {
-        await message.channel.send(options.content || { embeds: options.embeds });
-      },
-      reply: async (options: any) => {
-        await message.reply(options.content || { embeds: options.embeds });
-      },
-    } as ChatInputCommandInteraction;
+    });
 
     await this.execute(mockInteraction);
   }
 
-  public async execute(interaction: ChatInputCommandInteraction): Promise<void> {
-    const numToSkip = interaction.options.getInteger('number') ?? 1;
+  public async execute(
+    interaction: ChatInputCommandInteraction,
+  ): Promise<void> {
+    const numToSkip = interaction.options.getInteger("number") ?? 1;
 
     if (numToSkip < 1) {
-      throw new Error('invalid number of songs to skip');
+      throw new Error("invalid number of songs to skip");
     }
 
-    const player = this.playerManager.get(interaction.guild!.id);
+    const player = await this.playerManager.get(interaction.guild!.id);
 
     try {
       await player.forward(numToSkip);
       await interaction.reply({
-        content: 'keep \'er movin\'',
+        content: "keep 'er movin'",
         embeds: player.getCurrent() ? [buildPlayingMessageEmbed(player)] : [],
       });
     } catch (_: unknown) {
-      throw new Error('no song to skip to');
+      throw new Error("no song to skip to");
     }
   }
 }

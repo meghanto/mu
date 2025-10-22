@@ -1,24 +1,41 @@
-import {ChatInputCommandInteraction} from 'discord.js';
-import {inject, injectable} from 'inversify';
-import {TYPES} from '../types.js';
-import PlayerManager from '../managers/player.js';
-import Command from './index.js';
-import {SlashCommandBuilder} from '@discordjs/builders';
+import {
+  ChatInputCommandInteraction,
+  Message,
+  InteractionReplyOptions,
+  MessagePayload,
+} from "discord.js";
+import { inject, injectable } from "inversify";
+import { TYPES } from "../types.js";
+import PlayerManager from "../managers/player.js";
+import Command from "./index.js";
+import { SlashCommandBuilder } from "@discordjs/builders";
+import errorMsg from "../utils/error-msg.js";
+import { parsePositionArgument } from "../utils/parse-position-argument.js";
+import Player from "../services/player.js";
 
 @injectable()
 export default class implements Command {
   public readonly slashCommand = new SlashCommandBuilder()
-    .setName('move')
-    .setDescription('move songs within the queue')
-    .addStringOption(option =>
-      option.setName('from')
-        .setDescription('position of the song to move (e.g., 1, current, next-1)')
+    .setName("move")
+    .setDescription("move songs within the queue")
+    .addStringOption((option) =>
+      option
+        .setName("from")
+        .setDescription(
+          "position of the song to move (e.g., 1, current, next-1)",
+        )
         .setRequired(true),
     )
-    .addStringOption(option =>
-      option.setName('to')
-        .setDescription('position to move the song to (e.g., 1, top, next+2, last-1)')
-        .setRequired(true));
+    .addStringOption((option) =>
+      option
+        .setName("to")
+        .setDescription(
+          "position to move the song to (e.g., 1, top, next+2, last-1)",
+        )
+        .setRequired(true),
+    );
+
+  public readonly aliases = ["m"];
 
   private readonly playerManager: PlayerManager;
 
@@ -26,105 +43,118 @@ export default class implements Command {
     this.playerManager = playerManager;
   }
 
-  private parsePositionArgument(arg: string, player: Player): number {
-    const queueLength = player.queue.length;
-    const currentQueuePosition = player.queuePosition;
-
-    let basePosition: number | undefined; // 1-based index
-
-    if (arg.startsWith('top')) {
-      basePosition = 1;
-    } else if (arg.startsWith('current')) {
-      basePosition = currentQueuePosition + 1;
-    } else if (arg.startsWith('next')) {
-      basePosition = currentQueuePosition + 2;
-    } else if (arg.startsWith('last')) {
-      basePosition = queueLength;
-    } else {
-      basePosition = parseInt(arg, 10);
-    }
-
-    if (isNaN(basePosition) || basePosition < 1) {
-      throw new Error('Invalid position keyword or number.');
-    }
-
-    let offset = 0;
-    const offsetMatch = arg.match(/([+-]\d+)$/);
-    if (offsetMatch) {
-      offset = parseInt(offsetMatch[1], 10);
-    }
-
-    let finalPosition = basePosition + offset;
-
-    // Ensure 'finalPosition' is within valid bounds (1 to queueLength)
-    finalPosition = Math.max(1, Math.min(finalPosition, queueLength));
-
-    return finalPosition;
-  }
-
-  public async executePrefix(message: Message, args: string[], prefix: string): Promise<void> {
+  public async executePrefix(message: Message, args: string[]): Promise<void> {
     if (args.length < 2) {
-      await message.channel.send(errorMsg('Please provide both "from" and "to" positions.'));
+      await message.channel.send(
+        errorMsg('Please provide both "from" and "to" positions.'),
+      );
       return;
     }
 
-    const player = this.playerManager.get(message.guild!.id);
+    const player = await this.playerManager.get(message.guild!.id);
 
     let from: number;
     let to: number;
 
     try {
-      from = this.parsePositionArgument(args[0].toLowerCase(), player);
-      to = this.parsePositionArgument(args[1].toLowerCase(), player);
+      from = parsePositionArgument(args[0].toLowerCase(), player);
+      to = parsePositionArgument(args[1].toLowerCase(), player);
     } catch (e: unknown) {
       await message.channel.send(errorMsg((e as Error).message));
       return;
     }
 
+    // Validate that positions are within the visible queue (after current song)
+    if (from <= player.queuePosition) {
+      await message.channel.send(
+        errorMsg(
+          "Can only move songs that are in the queue (after the current song).",
+        ),
+      );
+      return;
+    }
+
+    // Convert absolute positions to queue-relative positions
     // Create a mock ChatInputCommandInteraction
     const mockInteraction: ChatInputCommandInteraction = {
       guild: message.guild,
       channel: message.channel,
       member: message.member,
       options: {
-        getInteger: (name: string) => {
-          if (name === 'from') return from;
-          if (name === 'to') return to;
+        getString: (name: string) => {
+          if (name === "from") {
+            return args[0].toLowerCase();
+          }
+
+          if (name === "to") {
+            return args[1].toLowerCase();
+          }
+
           return null;
         },
-      } as any,
-      deferReply: async (options?: any) => {
-        await message.channel.send('Thinking...');
       },
-      editReply: async (options: any) => {
-        await message.channel.send(options.content || { embeds: options.embeds });
+      deferReply: async () => {
+        await message.channel.send("Thinking...");
       },
-      reply: async (options: any) => {
-        await message.reply(options.content || { embeds: options.embeds });
+      editReply: async (
+        options: string | MessagePayload | InteractionReplyOptions,
+      ) => {
+        if (typeof options === "string") {
+          await message.channel.send(options);
+        } else if ("content" in options || "embeds" in options) {
+          await message.channel.send(
+            options.content ?? { embeds: options.embeds },
+          );
+        }
       },
-    } as ChatInputCommandInteraction;
+      reply: async (
+        options: string | MessagePayload | InteractionReplyOptions,
+      ) => {
+        if (typeof options === "string") {
+          await message.reply(options);
+        } else if ("content" in options || "embeds" in options) {
+          await message.reply(options.content ?? { embeds: options.embeds });
+        }
+      },
+    } as unknown as ChatInputCommandInteraction;
 
     await this.execute(mockInteraction);
   }
 
-  public async execute(interaction: ChatInputCommandInteraction): Promise<void> {
-    const player = this.playerManager.get(interaction.guild!.id);
+  public async execute(
+    interaction: ChatInputCommandInteraction,
+  ): Promise<void> {
+    const player = await this.playerManager.get(interaction.guild!.id);
 
-    const fromArg = interaction.options.getString('from')!;
-    const toArg = interaction.options.getString('to')!;
+    const fromArg = interaction.options.getString("from")!;
+    const toArg = interaction.options.getString("to")!;
 
     let from: number;
     let to: number;
 
     try {
-      from = this.parsePositionArgument(fromArg.toLowerCase(), player);
-      to = this.parsePositionArgument(toArg.toLowerCase(), player);
+      from = parsePositionArgument(fromArg.toLowerCase(), player);
+      to = parsePositionArgument(toArg.toLowerCase(), player);
     } catch (e: unknown) {
       throw new Error((e as Error).message); // Re-throw for slash command error handling
     }
 
-    const {title} = player.move(from, to);
+    // Validate that positions are within the visible queue (after current song)
+    if (from <= player.queuePosition) {
+      throw new Error(
+        "Can only move songs that are in the queue (after the current song).",
+      );
+    }
 
-    await interaction.reply('moved **' + title + '** to position **' + String(to) + '**');
+    // Convert absolute positions to queue-relative positions
+    const queueRelativeFrom = from - player.queuePosition - 1;
+    const queueRelativeTo = to - player.queuePosition - 1;
+
+    const { title } = await player.move(queueRelativeFrom, queueRelativeTo);
+
+    await interaction.reply({
+      content: `↔️ Moved **${title}** to position **${to}**`,
+      ephemeral: true,
+    });
   }
 }

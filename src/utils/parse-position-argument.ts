@@ -7,7 +7,7 @@ export const parsePositionArgument = (arg: string, player: Player): number => {
   let basePosition: number | undefined; // 1-based index
   let offset = 0;
 
-  const offsetMatch = arg.match(/([+-]\d+)$/);
+  const offsetMatch = /([+-]\d+)$/.exec(arg);
   let baseArg = arg;
 
   if (offsetMatch) {

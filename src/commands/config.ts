@@ -1,6 +1,7 @@
 import {SlashCommandBuilder} from '@discordjs/builders';
-import {ChatInputCommandInteraction, EmbedBuilder, PermissionFlagsBits} from 'discord.js';
+import {ChatInputCommandInteraction, EmbedBuilder, Message, PermissionFlagsBits} from 'discord.js';
 import {injectable} from 'inversify';
+import errorMsg from '../utils/error-msg.js';
 import {prisma} from '../utils/db.js';
 import Command from './index.js';
 import {getGuildSettings} from '../utils/get-guild-settings.js';
@@ -113,7 +114,7 @@ export default class implements Command {
           },
         });
 
-        await interaction.reply('👍 limit updated');
+        await interaction.reply({content: '✅ Playlist limit updated', ephemeral: true});
 
         break;
       }
@@ -130,7 +131,7 @@ export default class implements Command {
           },
         });
 
-        await interaction.reply('👍 wait delay updated');
+        await interaction.reply({content: '✅ Wait delay updated', ephemeral: true});
 
         break;
       }
@@ -147,7 +148,7 @@ export default class implements Command {
           },
         });
 
-        await interaction.reply('👍 leave setting updated');
+        await interaction.reply({content: '✅ Leave setting updated', ephemeral: true});
 
         break;
       }
@@ -164,7 +165,7 @@ export default class implements Command {
           },
         });
 
-        await interaction.reply('👍 queue add notification setting updated');
+        await interaction.reply({content: '✅ Queue add notification setting updated', ephemeral: true});
 
         break;
       }
@@ -181,7 +182,7 @@ export default class implements Command {
           },
         });
 
-        await interaction.reply('👍 auto announce setting updated');
+        await interaction.reply({content: '✅ Auto announce setting updated', ephemeral: true});
 
         break;
       }
@@ -198,7 +199,7 @@ export default class implements Command {
           },
         });
 
-        await interaction.reply('👍 volume setting updated');
+        await interaction.reply({content: '✅ Default volume setting updated', ephemeral: true});
 
         break;
       }
@@ -215,7 +216,7 @@ export default class implements Command {
           },
         });
 
-        await interaction.reply('👍 default queue page size updated');
+        await interaction.reply({content: '✅ Default queue page size updated', ephemeral: true});
 
         break;
       }
@@ -232,7 +233,7 @@ export default class implements Command {
           },
         });
 
-        await interaction.reply(`👍 prefix updated to \`${newPrefix}\``);
+        await interaction.reply({content: `✅ Prefix updated to \`${newPrefix}\``, ephemeral: true});
 
         break;
       }
@@ -249,7 +250,7 @@ export default class implements Command {
           },
         });
 
-        await interaction.reply('👍 turn down volume setting updated');
+        await interaction.reply({content: '✅ Turn down volume setting updated', ephemeral: true});
 
         break;
       }
@@ -266,7 +267,7 @@ export default class implements Command {
           },
         });
 
-        await interaction.reply('👍 turn down volume target setting updated');
+        await interaction.reply({content: '✅ Turn down volume target setting updated', ephemeral: true});
 
         break;
       }
@@ -287,7 +288,7 @@ export default class implements Command {
           'Default Volume': config.defaultVolume,
           'Default queue page size': config.defaultQueuePageSize,
           'Reduce volume when people speak': config.turnDownVolumeWhenPeopleSpeak ? 'yes' : 'no',
-          'Prefix': config.prefix,
+          Prefix: config.prefix,
         };
 
         let description = '';
@@ -342,7 +343,7 @@ export default class implements Command {
         'Default Volume': config.defaultVolume,
         'Default queue page size': config.defaultQueuePageSize,
         'Reduce volume when people speak': config.turnDownVolumeWhenPeopleSpeak ? 'yes' : 'no',
-        'Prefix': config.prefix,
+        Prefix: config.prefix,
       };
 
       let description = '';
