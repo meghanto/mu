@@ -239,10 +239,6 @@ export default class implements Command {
     await message.react('◀️');
     await message.react('▶️');
 
-    interaction.guild?.members.me?.roles.cache.forEach(role => {
-      console.log(`Channel permission overwrites for ${role.name}:`, interaction.channel?.permissionOverwrites.cache.get(role.id));
-    });
-
     const collector = message.createReactionCollector({
       filter: (reaction, user) => (reaction.emoji.name === '◀️' || reaction.emoji.name === '▶️') && user.id === interaction.user.id,
       time: 60000,
