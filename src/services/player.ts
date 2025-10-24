@@ -884,9 +884,7 @@ export default class Player {
       this.markQueueStateDirty();
     });
 
-    if (this.status !== STATUS.PLAYING) {
-      await this.play();
-    }
+    await this.play();
   }
 
   /**
