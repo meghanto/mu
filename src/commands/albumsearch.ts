@@ -232,7 +232,10 @@ export default class AlbumSearchCommand implements Command {
           time: 15_000,
           filter: (m: Message) => m.author.id === interaction.user.id,
         })
-        .catch(() => undefined);
+        .catch((error) => {
+          debug('awaitMessages failed', error);
+          return undefined;
+        });
       const content = reply?.first()?.content?.trim();
       const at = content ? parseInt(content, 10) : NaN;
       if (!content || Number.isNaN(at) || at < 1) {

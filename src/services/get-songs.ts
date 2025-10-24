@@ -124,7 +124,7 @@ export default class {
           throw new Error("that doesn't exist");
         }
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (err instanceof Error && err.message === "Spotify is not enabled!") {
         throw err;
       }

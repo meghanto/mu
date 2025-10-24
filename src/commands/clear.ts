@@ -10,6 +10,8 @@ import { TYPES } from "../types.js";
 import PlayerManager from "../managers/player.js";
 import Command from "./index.js";
 
+import { createMockInteraction } from "../utils/mock-interaction.js";
+
 @injectable()
 export default class implements Command {
   public readonly slashCommand = new SlashCommandBuilder()
@@ -27,40 +29,7 @@ export default class implements Command {
   }
 
   public async executePrefix(message: Message): Promise<void> {
-    // Clear command doesn't take arguments for prefix commands
-    const mockInteraction: ChatInputCommandInteraction = {
-      guild: message.guild,
-      channel: message.channel,
-      member: message.member,
-      options: {
-        // No options for clear command
-      },
-      deferReply: async () => {
-        await message.channel.send("Thinking...");
-      },
-      editReply: async (
-        options: string | MessagePayload | InteractionReplyOptions,
-      ) => {
-        if (typeof options === "string") {
-          await message.channel.send(options);
-        } else if ("content" in options || "embeds" in options) {
-          await message.channel.send(
-            options.content ?? { embeds: options.embeds },
-          );
-        }
-      },
-      reply: async (
-        options: string | MessagePayload | InteractionReplyOptions,
-      ) => {
-        if (typeof options === "string") {
-          await message.reply(options);
-        } else if ("content" in options || "embeds" in options) {
-          await message.reply(options.content ?? { embeds: options.embeds });
-        }
-      },
-    } as unknown as ChatInputCommandInteraction;
-
-    await this.execute(mockInteraction);
+    await this.execute(createMockInteraction(message));
   }
 
   public async execute(interaction: ChatInputCommandInteraction) {

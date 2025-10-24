@@ -46,10 +46,7 @@ export default class implements Command {
       return;
     }
 
-    const mockInteraction = {
-      guild: message.guild,
-      channel: message.channel,
-      member: message.member,
+    const mockInteraction = createMockInteraction(message, {
       options: {
         getString: (name: string) => {
           if (name === "time") {
@@ -59,21 +56,18 @@ export default class implements Command {
           return null;
         },
       },
-      deferReply: async () => {
-        await message.channel.send("Seeking...");
+      reply: {
+        deferReply: async () => {
+          await message.channel.send("Seeking...");
+        },
+        editReply: async (options: string | MessagePayload | InteractionReplyOptions) => {
+          if (typeof options === "object" && "content" in options && options.content) {
+            return message.channel.send(options.content);
+          }
+          return message.channel.send(options as string);
+        },
       },
-      editReply: async (
-        options: string | MessagePayload | InteractionReplyOptions,
-      ) => {
-        if (
-          typeof options === "object" &&
-          "content" in options &&
-          options.content
-        ) {
-          await message.channel.send(options.content);
-        }
-      },
-    } as unknown as ChatInputCommandInteraction;
+    });
 
     await this.execute(mockInteraction);
   }

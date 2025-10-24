@@ -17,7 +17,7 @@ export default class implements Command {
     .setName("join")
     .setDescription("join your voice channel");
 
-  public aliases = ["j"];
+  public aliases = [];
 
   public requiresVC = true;
 

@@ -12,6 +12,8 @@ import Command from "./index.js";
 import { prettyTime } from "../utils/time.js";
 import durationStringToSeconds from "../utils/duration-string-to-seconds.js";
 
+import { createMockInteraction } from "../utils/mock-interaction.js";
+
 @injectable()
 export default class implements Command {
   public readonly slashCommand = new SlashCommandBuilder()
@@ -44,7 +46,7 @@ export default class implements Command {
       return;
     }
 
-    const mockInteraction = {
+    const mockInteraction = createMockInteraction(message, {
       options: {
         getString: (name: string) => {
           if (name === "time") {
@@ -54,24 +56,18 @@ export default class implements Command {
           return null;
         },
       },
-      guild: message.guild,
-      channel: message.channel,
-      user: message.author,
-      deferReply: async () => {
-        await message.channel.send("Seeking...");
+      reply: {
+        deferReply: async () => {
+          await message.channel.send("Seeking...");
+        },
+        editReply: async (options: string | MessagePayload | InteractionReplyOptions) => {
+          if (typeof options === "object" && "content" in options && options.content) {
+            return message.channel.send(options.content);
+          }
+          return message.channel.send(options as string);
+        },
       },
-      editReply: async (
-        options: string | MessagePayload | InteractionReplyOptions,
-      ) => {
-        if (
-          typeof options === "object" &&
-          "content" in options &&
-          options.content
-        ) {
-          await message.channel.send(options.content);
-        }
-      },
-    } as unknown as ChatInputCommandInteraction;
+    });
 
     await this.execute(mockInteraction);
   }

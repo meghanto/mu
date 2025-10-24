@@ -13,6 +13,8 @@ import errorMsg from "../utils/error-msg.js";
 import { parsePositionArgument } from "../utils/parse-position-argument.js";
 import Player from "../services/player.js";
 
+import { createMockInteraction } from "../utils/mock-interaction.js";
+
 @injectable()
 export default class implements Command {
   public readonly slashCommand = new SlashCommandBuilder()
@@ -51,35 +53,7 @@ export default class implements Command {
       return;
     }
 
-    const player = await this.playerManager.get(message.guild!.id);
-
-    let from: number;
-    let to: number;
-
-    try {
-      from = parsePositionArgument(args[0].toLowerCase(), player);
-      to = parsePositionArgument(args[1].toLowerCase(), player);
-    } catch (e: unknown) {
-      await message.channel.send(errorMsg((e as Error).message));
-      return;
-    }
-
-    // Validate that positions are within the visible queue (after current song)
-    if (from <= player.queuePosition) {
-      await message.channel.send(
-        errorMsg(
-          "Can only move songs that are in the queue (after the current song).",
-        ),
-      );
-      return;
-    }
-
-    // Convert absolute positions to queue-relative positions
-    // Create a mock ChatInputCommandInteraction
-    const mockInteraction: ChatInputCommandInteraction = {
-      guild: message.guild,
-      channel: message.channel,
-      member: message.member,
+    const mockInteraction = createMockInteraction(message, {
       options: {
         getString: (name: string) => {
           if (name === "from") {
@@ -93,30 +67,7 @@ export default class implements Command {
           return null;
         },
       },
-      deferReply: async () => {
-        await message.channel.send("Thinking...");
-      },
-      editReply: async (
-        options: string | MessagePayload | InteractionReplyOptions,
-      ) => {
-        if (typeof options === "string") {
-          await message.channel.send(options);
-        } else if ("content" in options || "embeds" in options) {
-          await message.channel.send(
-            options.content ?? { embeds: options.embeds },
-          );
-        }
-      },
-      reply: async (
-        options: string | MessagePayload | InteractionReplyOptions,
-      ) => {
-        if (typeof options === "string") {
-          await message.reply(options);
-        } else if ("content" in options || "embeds" in options) {
-          await message.reply(options.content ?? { embeds: options.embeds });
-        }
-      },
-    } as unknown as ChatInputCommandInteraction;
+    });
 
     await this.execute(mockInteraction);
   }

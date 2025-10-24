@@ -15,6 +15,10 @@ type OptionOverrides = Partial<{
 
 interface MockInteractionOverrides {
   options?: OptionOverrides;
+  reply?: Partial<{
+    deferReply: () => Promise<void>;
+    editReply: (payload: string | MessagePayload | InteractionReplyOptions) => Promise<Message>;
+  }>;
 }
 
 /**
@@ -70,23 +74,25 @@ export function createMockInteraction(
     channel: message.channel,
     member: message.member,
     user: message.author,
+    guildId: message.guild!.id,
+    channelId: message.channel.id,
+    applicationId: message.client.application!.id,
     replied: false,
     deferred: false,
     options,
+    isCommand: () => true,
     reply: async (
       payload: string | MessagePayload | InteractionReplyOptions,
     ) => {
       mock.replied = true;
       return sendReply("reply", payload);
     },
-    editReply: async (
-      payload: string | MessagePayload | InteractionReplyOptions,
-    ) => sendReply("reply", payload),
-    deferReply: async () => {
+    editReply: overrides?.reply?.editReply ?? (async (payload: string | MessagePayload | InteractionReplyOptions) => sendReply("reply", payload)),
+    deferReply: overrides?.reply?.deferReply ?? (async () => {
       mock.deferred = true;
       await message.channel.sendTyping();
       return undefined;
-    },
+    }),
     fetchReply: async () => lastReply ?? message,
     followUp: async (
       payload: string | MessagePayload | InteractionReplyOptions,

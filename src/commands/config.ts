@@ -309,53 +309,68 @@ export default class implements Command {
   }
 
   public async executePrefix(message: Message, args: string[]): Promise<void> {
-    if (args[0] === 'set-prefix') {
-      const newPrefix = args[1];
+    const subcommand = args[0];
+    const subcommandArgs = args.slice(1);
 
-      if (!newPrefix) {
-        await message.channel.send(errorMsg('Please provide a prefix.'));
-        return;
-      }
+    if (!subcommand) {
+      await message.channel.send(errorMsg('Please provide a subcommand.'));
+      return;
+    }
 
-      await prisma.setting.update({
-        where: {
-          guildId: message.guild!.id,
+    const mockInteraction = createMockInteraction(message, {
+      options: {
+        getSubcommand: () => subcommand,
+        getString: (name: string) => {
+          if (subcommand === 'set-prefix' && name === 'prefix') {
+            return subcommandArgs[0];
+          }
+          return null;
         },
-        data: {
-          prefix: newPrefix,
+        getInteger: (name: string) => {
+          const value = parseInt(subcommandArgs[0], 10);
+          if (isNaN(value)) {
+            return null;
+          }
+          if (subcommand === 'set-playlist-limit' && name === 'limit') {
+            return value;
+          }
+          if (subcommand === 'set-wait-after-queue-empties' && name === 'delay') {
+            return value;
+          }
+          if (subcommand === 'set-reduce-vol-when-voice-target' && name === 'volume') {
+            return value;
+          }
+          if (subcommand === 'set-default-volume' && name === 'level') {
+            return value;
+          }
+          if (subcommand === 'set-default-queue-page-size' && name === 'page-size') {
+            return value;
+          }
+          return null;
         },
-      });
-
-      await message.channel.send(`Prefix set to \`${newPrefix}\``);
-    } else if (args[0] === 'get') {
-      const embed = new EmbedBuilder().setTitle('Config');
-
-      const config = await getGuildSettings(message.guild!.id);
-
-      const settingsToShow = {
-        'Playlist Limit': config.playlistLimit,
-        'Wait before leaving after queue empty': config.secondsToWaitAfterQueueEmpties === 0
-          ? 'never leave'
-          : `${config.secondsToWaitAfterQueueEmpties}s`,
-        'Leave if there are no listeners': config.leaveIfNoListeners ? 'yes' : 'no',
-        'Auto announce next song in queue': config.autoAnnounceNextSong ? 'yes' : 'no',
-        'Add to queue reponses show for requester only': config.autoAnnounceNextSong ? 'yes' : 'no',
-        'Default Volume': config.defaultVolume,
-        'Default queue page size': config.defaultQueuePageSize,
-        'Reduce volume when people speak': config.turnDownVolumeWhenPeopleSpeak ? 'yes' : 'no',
-        Prefix: config.prefix,
-      };
-
-      let description = '';
-      for (const [key, value] of Object.entries(settingsToShow)) {
-        description += `**${key}**: ${value}\n`;
+        getBoolean: (name: string) => {
+          const value = subcommandArgs[0]?.toLowerCase() === 'true';
+          if (subcommand === 'set-leave-if-no-listeners' && name === 'value') {
+            return value;
+          }
+          if (subcommand === 'set-queue-add-response-hidden' && name === 'value') {
+            return value;
+          }
+          if (subcommand === 'set-reduce-vol-when-voice' && name === 'value') {
+            return value;
+          }
+          if (subcommand === 'set-auto-announce-next-song' && name === 'value') {
+            return value;
+          }
+          return null;
+        }
       }
+    });
 
-      embed.setDescription(description);
-
-      await message.channel.send({embeds: [embed]});
-    } else {
-      await message.channel.send(errorMsg('unknown subcommand'));
+    try {
+      await this.execute(mockInteraction);
+    } catch (error) {
+      await message.channel.send(errorMsg(error as Error));
     }
   }
 }

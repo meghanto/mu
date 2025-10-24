@@ -28,28 +28,7 @@ export default class implements Command {
   }
 
   public async executePrefix(message: Message): Promise<void> {
-    const mockInteraction = {
-      guild: message.guild,
-      channel: message.channel,
-      member: message.member,
-      options: {},
-      deferReply: async () => {
-        await message.channel.send("Replaying...");
-      },
-      editReply: async (
-        options: string | MessagePayload | InteractionReplyOptions,
-      ) => {
-        if (
-          typeof options === "object" &&
-          "content" in options &&
-          options.content
-        ) {
-          await message.channel.send(options.content);
-        }
-      },
-    } as unknown as ChatInputCommandInteraction;
-
-    await this.execute(mockInteraction);
+    await this.execute(createMockInteraction(message));
   }
 
   public async execute(
