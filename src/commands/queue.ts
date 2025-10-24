@@ -142,6 +142,13 @@ export default class implements Command {
     let subcommand = args[0];
     let restArgs = args.slice(1);
 
+    if (subcommand === 'import') {
+      await message.reply({
+        content: "The `import` command is only supported via slash commands.",
+      });
+      return;
+    }
+
     const validSubcommands = [
       "show",
       "save",
@@ -149,14 +156,13 @@ export default class implements Command {
       "list",
       "delete",
       "export",
-      "import",
     ];
     if (!validSubcommands.includes(subcommand)) {
       subcommand = "show";
       restArgs = args;
     }
 
-    const mockInteraction = {
+    const mockInteraction = createMockInteraction(message, {
       options: {
         getSubcommand: () => subcommand,
         getInteger: (name: string) => {
@@ -179,30 +185,12 @@ export default class implements Command {
 
           return null;
         },
-        getAttachment: (name: string) => {
-          if (subcommand === "import" && name === "file") {
-            // Prefix commands do not support file attachments directly
-            return null;
-          }
-
+        getAttachment: (_name: string) => {
+          // Prefix commands do not support file attachments directly
           return null;
         },
       },
-      guild: message.guild,
-      channel: message.channel,
-      user: message.author,
-      reply: async (options: any) => {
-        if (subcommand === "import") {
-          await message.reply({
-            content:
-              "The `import` command is only supported via slash commands.",
-          });
-          return;
-        }
-
-        await message.reply(options);
-      },
-    } as unknown as ChatInputCommandInteraction;
+    });
 
     await this.execute(mockInteraction);
   }
@@ -246,7 +234,54 @@ export default class implements Command {
 
     const embed = buildQueueEmbed(player, page, pageSize);
 
-    await interaction.reply({ embeds: [embed] });
+    const message = await interaction.reply({ embeds: [embed], fetchReply: true });
+
+    await message.react('◀️');
+    await message.react('▶️');
+
+    interaction.guild?.members.me?.roles.cache.forEach(role => {
+      console.log(`Channel permission overwrites for ${role.name}:`, interaction.channel?.permissionOverwrites.cache.get(role.id));
+    });
+
+    const collector = message.createReactionCollector({
+      filter: (reaction, user) => (reaction.emoji.name === '◀️' || reaction.emoji.name === '▶️') && user.id === interaction.user.id,
+      time: 60000,
+    });
+
+    collector.on('collect', async (reaction) => {
+      if (reaction.emoji.name === '◀️') {
+        page--;
+      } else {
+        page++;
+      }
+
+      const maxQueuePage = Math.ceil(player.getFullQueue().length / pageSize);
+
+      if (page < 1) {
+        page = 1;
+      } else if (page > maxQueuePage) {
+        page = maxQueuePage;
+      }
+
+      const newEmbed = buildQueueEmbed(player, page, pageSize);
+
+      await message.edit({ embeds: [newEmbed] });
+
+      if (message.channel.permissionsFor(message.client.user!)?.has('ManageMessages')) {
+        reaction.users.remove(interaction.user.id).catch(error => {
+          console.error('Failed to remove reaction:', error);
+        });
+      } else {
+        console.warn('Missing MANAGE_MESSAGES permission to remove user reactions.');
+      }
+    });
+
+    collector.on('end', async () => {
+      console.log('collector ended');
+      await message.reactions.removeAll().catch(error => {
+        console.error('Failed to remove reactions:', error);
+      });
+    });
   }
 
   private async executeSave(interaction: ChatInputCommandInteraction) {

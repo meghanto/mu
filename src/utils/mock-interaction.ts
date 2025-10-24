@@ -48,6 +48,7 @@ export function createMockInteraction(
     target: "reply" | "channel" | "followUp",
     payload: string | MessagePayload | InteractionReplyOptions,
   ) => {
+    console.log('payload', payload);
     let response: Message;
 
     if (typeof payload === "string") {
@@ -61,6 +62,8 @@ export function createMockInteraction(
           ? await message.reply(payload as any)
           : await message.channel.send(payload as any);
     }
+
+    console.log('response', response);
 
     if (target === "reply") {
       lastReply = response;
@@ -93,7 +96,7 @@ export function createMockInteraction(
       await message.channel.sendTyping();
       return undefined;
     }),
-    fetchReply: async () => lastReply ?? message,
+    fetchReply: overrides?.reply?.fetchReply ?? (async () => lastReply ?? message),
     followUp: async (
       payload: string | MessagePayload | InteractionReplyOptions,
     ) => sendReply("channel", payload),
