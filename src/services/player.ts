@@ -19,6 +19,7 @@ import {
   VoiceConnectionStatus,
 } from "@discordjs/voice";
 import FileCacheProvider from "./file-cache.js";
+import Config from "./config.js";
 import debug from "../utils/debug.js";
 import { getGuildSettings } from "../utils/get-guild-settings.js";
 import { buildPlayingMessageEmbed } from "../utils/build-embed.js";
@@ -134,6 +135,7 @@ export default class Player {
 
   private positionInSeconds = 0;
   private readonly fileCache: FileCacheProvider;
+  private readonly config: Config;
   private disconnectTimer: NodeJS.Timeout | null = null;
 
   private readonly channelToSpeakingUsers: Map<string, Set<string>> = new Map();
@@ -145,16 +147,18 @@ export default class Player {
   private undoStack: QueueSnapshot[] = [];
   private static hasLoggedMissingQueueState = false;
 
-  private constructor(fileCache: FileCacheProvider, guildId: string) {
+  private constructor(fileCache: FileCacheProvider, guildId: string, config: Config) {
     this.fileCache = fileCache;
     this.guildId = guildId;
+    this.config = config;
   }
 
   static async create(
     fileCache: FileCacheProvider,
     guildId: string,
+    config: Config,
   ): Promise<Player> {
-    const player = new Player(fileCache, guildId);
+    const player = new Player(fileCache, guildId, config);
     await player.loadQueueState();
     return player;
   }
@@ -1253,7 +1257,26 @@ export default class Player {
 
   private async getVideoInfoWithYtDlp(url: string): Promise<YtDlpResponse> {
     return new Promise((resolve, reject) => {
-      const ytDlp = spawn("yt-dlp", ["--dump-json", "--no-warnings", url]);
+      const args: string[] = [
+        "--dump-json",
+        "--no-warnings",
+      ];
+
+      // Add cookies if configured - try browser first, then file
+      if (this.config.YT_DLP_COOKIES_BROWSER) {
+        args.push("--cookies-from-browser", this.config.YT_DLP_COOKIES_BROWSER);
+        debug("Using cookies from browser:", this.config.YT_DLP_COOKIES_BROWSER);
+      } else if (this.config.YT_DLP_COOKIES_FILE && fs.existsSync(this.config.YT_DLP_COOKIES_FILE)) {
+        args.push("--cookies", this.config.YT_DLP_COOKIES_FILE);
+        debug("Using cookies file:", this.config.YT_DLP_COOKIES_FILE);
+      } else {
+        debug("No cookies configured");
+      }
+
+      args.push(url);
+
+      debug("yt-dlp args:", args);
+      const ytDlp = spawn("yt-dlp", args);
 
       let stdout = "";
       let stderr = "";
@@ -1272,6 +1295,7 @@ export default class Player {
             const info = JSON.parse(stdout) as YtDlpResponse;
             resolve(info);
           } catch (parseError: unknown) {
+            debug("Failed to parse yt-dlp JSON output:", parseError);
             reject(
               new Error(
                 `Failed to parse yt-dlp JSON output: ${String(parseError)}`,
@@ -1279,11 +1303,14 @@ export default class Player {
             );
           }
         } else {
+          debug("yt-dlp failed with code:", code);
+          debug("yt-dlp stderr:", stderr);
           reject(new Error(`yt-dlp failed with code ${code}: ${stderr}`));
         }
       });
 
       ytDlp.on("error", (error: Error) => {
+        debug("Failed to spawn yt-dlp:", error.message);
         reject(new Error(`Failed to spawn yt-dlp: ${error.message}`));
       });
     });

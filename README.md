@@ -103,6 +103,16 @@ By default, Muse limits the total cache size to around 2 GB. If you want to chan
 Muse can skip non-music segments at the beginning or end of a Youtube music video (Using [SponsorBlock](https://sponsor.ajay.app/)). It is disabled by default. If you want to enable it, set the environment variable `ENABLE_SPONSORBLOCK=true` or uncomment it in your .env.
 Being a community project, the server may be down or overloaded. When it happen, Muse will skip requests to SponsorBlock for a few minutes. You can change the skip duration by setting the value of `SPONSORBLOCK_TIMEOUT`.
 
+### YouTube Cookies (for bot detection bypass)
+
+If you encounter "Sign in to confirm you're not a bot" errors from YouTube, you can provide cookies to bypass detection. Export your YouTube cookies using a browser extension (like "Get cookies.txt" for Chrome or "cookies.txt" for Firefox) and save them to a file. Then set the environment variable `YT_DLP_COOKIES_FILE` to the path of your cookies file.
+
+**Example**:
+- Export cookies to `/path/to/cookies.txt`
+- Set `YT_DLP_COOKIES_FILE=/path/to/cookies.txt` in your `.env` file
+
+**Important**: The `cookies.txt` file is in `.gitignore` for security. Never commit your cookies file to version control!
+
 ### Custom Bot Status
 
 In the default state, Muse has the status "Online" and the text "Listening to Music". You can change the status through environment variables:

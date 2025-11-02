@@ -8,6 +8,11 @@ services:
     image: muse-bot:dev
     env_file:
       - .env.dev
+    environment:
+      # Set cookies file path if cookies.txt exists in the project root
+      - YT_DLP_COOKIES_FILE=/usr/src/app/cookies.txt
+      # Enable debug logging
+      - DEBUG=muse:*
     volumes:
       - ./:/usr/src/app
 

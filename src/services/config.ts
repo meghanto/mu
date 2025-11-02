@@ -27,6 +27,8 @@ const CONFIG_MAP = {
   BOT_ACTIVITY: process.env.BOT_ACTIVITY ?? 'music',
   ENABLE_SPONSORBLOCK: process.env.ENABLE_SPONSORBLOCK === 'true',
   SPONSORBLOCK_TIMEOUT: process.env.ENABLE_SPONSORBLOCK ?? 5,
+  YT_DLP_COOKIES_FILE: process.env.YT_DLP_COOKIES_FILE,
+  YT_DLP_COOKIES_BROWSER: process.env.YT_DLP_COOKIES_BROWSER,
 } as const;
 
 const BOT_ACTIVITY_TYPE_MAP = {
@@ -35,6 +37,14 @@ const BOT_ACTIVITY_TYPE_MAP = {
   WATCHING: ActivityType.Watching,
   STREAMING: ActivityType.Streaming,
 } as const;
+
+// Optional configuration keys that are allowed to be undefined
+const OPTIONAL_KEYS = [
+  'SPOTIFY_USER_ACCESS_TOKEN',
+  'SPOTIFY_USER_REFRESH_TOKEN',
+  'YT_DLP_COOKIES_FILE',
+  'YT_DLP_COOKIES_BROWSER',
+] as const;
 
 @injectable()
 export default class Config {
@@ -55,10 +65,17 @@ export default class Config {
   readonly BOT_ACTIVITY!: string;
   readonly ENABLE_SPONSORBLOCK!: boolean;
   readonly SPONSORBLOCK_TIMEOUT!: number;
+  readonly YT_DLP_COOKIES_FILE?: string;
+  readonly YT_DLP_COOKIES_BROWSER?: string;
 
   constructor() {
     for (const [key, value] of Object.entries(CONFIG_MAP)) {
       if (typeof value === 'undefined') {
+        // Allow optional keys to be undefined
+        if (OPTIONAL_KEYS.includes(key as typeof OPTIONAL_KEYS[number])) {
+          (this as any)[key] = undefined;
+          continue;
+        }
         console.error(`Missing environment variable for ${key}`);
         process.exit(1);
       }
