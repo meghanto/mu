@@ -90,14 +90,16 @@ export default class implements Command {
       throw new Error((e as Error).message); // Re-throw for slash command error handling
     }
 
-    // Validate that positions are within the visible queue (after current song)
-    if (from <= player.queuePosition) {
+    // Prevent moving songs from the future to the past
+    // Allow moving songs from the past to the future
+    if (from > player.queuePosition && to <= player.queuePosition) {
       throw new Error(
-        "Can only move songs that are in the queue (after the current song).",
+        "Cannot move songs from the future to the past.",
       );
     }
 
     // Convert absolute positions to queue-relative positions
+    // For past songs (from <= queuePosition), use negative relative positions
     const queueRelativeFrom = from - player.queuePosition - 1;
     const queueRelativeTo = to - player.queuePosition - 1;
 
