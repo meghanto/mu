@@ -723,11 +723,13 @@ export default class Player {
     await this.enqueueOperation(() => {
       const targetPosition = this.queuePosition + skip;
 
+      // If skipping beyond the queue, set position to end of queue (empty queue)
       if (targetPosition >= this.queue.length) {
-        throw new Error("No songs in queue to forward to.");
+        this.queuePosition = this.queue.length;
+      } else {
+        this.queuePosition = targetPosition;
       }
 
-      this.queuePosition = targetPosition;
       this.positionInSeconds = 0;
       this.stopTrackingPosition();
       this.markQueueStateDirty();
@@ -1199,17 +1201,47 @@ export default class Player {
   }
 
   async move(from: number, to: number): Promise<QueuedSong> {
-    if (from > this.queueSize() || to > this.queueSize()) {
+    // Validate indices are within the full queue bounds
+    // from and to are queue-relative (0-based after current song, negative for past)
+    const fromIndex = this.queuePosition + from;
+    const toIndex = this.queuePosition + to;
+
+    if (fromIndex < 0 || fromIndex >= this.queue.length) {
+      throw new Error("Move index is outside the range of the queue.");
+    }
+
+    if (toIndex < 0 || toIndex >= this.queue.length) {
       throw new Error("Move index is outside the range of the queue.");
     }
 
     return this.enqueueOperation(
       () => {
-        const moved = this.queue.splice(this.queuePosition + from, 1)[0];
+        const originalQueuePosition = this.queuePosition;
+        const moved = this.queue.splice(fromIndex, 1)[0];
 
-        this.queue.splice(this.queuePosition + to, 0, moved);
+        // Update queuePosition if we removed an item before the current position
+        // Removing an item shifts everything after it left by 1
+        if (fromIndex < originalQueuePosition) {
+          this.queuePosition--;
+        }
+
+        // Adjust toIndex after removal
+        // If we removed before toIndex, toIndex needs to shift left by 1
+        let adjustedToIndex = toIndex;
+        if (fromIndex < toIndex) {
+          adjustedToIndex = toIndex - 1;
+        }
+        
+        // Update queuePosition if we're inserting before the current position
+        // Inserting an item shifts everything at and after that position right by 1
+        if (adjustedToIndex <= this.queuePosition) {
+          this.queuePosition++;
+        }
+
+        this.queue.splice(adjustedToIndex, 0, moved);
         this.markQueueStateDirty();
-        return this.queue[this.queuePosition + to];
+        // Return the moved song at its new position
+        return this.queue[adjustedToIndex];
       },
       { recordUndo: true },
     );
