@@ -18,6 +18,7 @@ interface MockInteractionOverrides {
   reply?: Partial<{
     deferReply: () => Promise<void>;
     editReply: (payload: string | MessagePayload | InteractionReplyOptions) => Promise<Message>;
+    fetchReply: () => Promise<Message>;
   }>;
 }
 
@@ -96,7 +97,7 @@ export function createMockInteraction(
       await message.channel.sendTyping();
       return undefined;
     }),
-    fetchReply: overrides?.reply?.fetchReply ?? (async () => lastReply ?? message),
+    fetchReply: overrides?.reply?.fetchReply ?? (async () => lastReply ?? message as Message),
     followUp: async (
       payload: string | MessagePayload | InteractionReplyOptions,
     ) => sendReply("channel", payload),
