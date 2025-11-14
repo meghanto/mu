@@ -105,6 +105,44 @@ export default class {
     return this.getVideo(firstVideo.url, shouldSplitChapters);
   }
 
+  /**
+   * Returns metadata for the top N video results for a query (up to limit).
+   * Each result is a single SongMetadata entry (first segment if chapters are split).
+   */
+  async searchMany(query: string, limit = 10, shouldSplitChapters = false): Promise<SongMetadata[]> {
+    const result = await this.ytsrQueue.add<ytsr.VideoResult>(async () => this.cache.wrap(
+      ytsr,
+      query,
+      {limit},
+      {expiresIn: ONE_HOUR_IN_SECONDS},
+    ));
+
+    if (!result) {
+      return [];
+    }
+
+    const videos: Video[] = [];
+    for (const item of result.items) {
+      if (item.type === 'video') {
+        videos.push(item);
+        if (videos.length >= limit) {
+          break;
+        }
+      }
+    }
+
+    const out: SongMetadata[] = [];
+    for (const v of videos) {
+      // eslint-disable-next-line no-await-in-loop
+      const songs = await this.getVideo(v.url, shouldSplitChapters);
+      if (songs.length > 0) {
+        out.push(songs[0]);
+      }
+    }
+
+    return out;
+  }
+
   async getVideo(url: string, shouldSplitChapters: boolean): Promise<SongMetadata[]> {
     const result = await this.getVideosByID([String(getYouTubeID(url))]);
     const video = result.at(0);
@@ -143,7 +181,10 @@ export default class {
 
     let nextToken: string | undefined;
 
-    while (playlistVideos.length < playlist.contentDetails.itemCount) {
+    // Fetch all items, up to a reasonable hard limit (e.g., 5000 songs) to prevent excessive memory use
+    const HARD_PLAYLIST_FETCH_LIMIT = 5000;
+
+    while (playlistVideos.length < playlist.contentDetails.itemCount && playlistVideos.length < HARD_PLAYLIST_FETCH_LIMIT) {
       const playlistItemsParams = {
         searchParams: {
           part: 'id, contentDetails',
