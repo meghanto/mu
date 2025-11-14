@@ -11,6 +11,7 @@ type OptionOverrides = Partial<{
   getBoolean: (name: string, required?: boolean) => boolean | null;
   getNumber: (name: string, required?: boolean) => number | null;
   getSubcommand: () => string | null;
+  getAttachment: (name: string) => any | null;
 }>;
 
 interface MockInteractionOverrides {

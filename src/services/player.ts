@@ -1763,21 +1763,15 @@ export default class Player {
         .on("end", () => {
           debug("FFmpeg process ended normally");
         })
-        .on("exit", (code: number, signal: string) => {
-          debug(`FFmpeg exited with code ${code} and signal ${signal}`);
+        .on("error", (err: Error) => {
+          debug(`FFmpeg error: ${err.message}`);
 
-          // If exit was abnormal and we haven't resolved, reject
-          if (
-            code !== 0 &&
-            code !== null &&
-            !hasResolved &&
-            !hasReturnedStreamClosed
-          ) {
+          // If error occurred and we haven't resolved, reject
+          if (!hasResolved && !hasReturnedStreamClosed) {
             hasResolved = true;
-            const errorMessage = `FFmpeg exited with code ${code} while processing ${options.url}`;
+            const errorMessage = `FFmpeg error while processing ${options.url}: ${err.message}`;
             console.error(errorMessage);
-            const error = new Error(errorMessage);
-            reject(error);
+            reject(err);
           }
         });
 
@@ -1820,8 +1814,8 @@ export default class Player {
     });
 
     // Add error handler for metadata if available
-    if (audioResource.metadata) {
-      audioResource.metadata.on?.("error", (error: Error) => {
+    if (audioResource.metadata && typeof (audioResource.metadata as any).on === 'function') {
+      (audioResource.metadata as any).on("error", (error: Error) => {
         debug(`Audio resource metadata error: ${formatError(error)}`);
       });
     }

@@ -263,7 +263,7 @@ export default class implements Command {
 
       await message.edit({ embeds: [newEmbed] });
 
-      if (message.channel.permissionsFor(message.client.user!)?.has('ManageMessages')) {
+      if (message.channel.isTextBased() && 'permissionsFor' in message.channel && message.channel.permissionsFor(message.client.user!)?.has('ManageMessages')) {
         reaction.users.remove(interaction.user.id).catch(error => {
           console.error('Failed to remove reaction:', error);
         });
