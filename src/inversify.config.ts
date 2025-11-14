@@ -49,6 +49,7 @@ import UndoCommand from './commands/undo.js';
 import RemoveDuplicatesCommand from './commands/remove-duplicates.js';
 import JoinCommand from './commands/join.js';
 import MoveRangeCommand from './commands/moverange.js';
+import RemoveRangeCommand from './commands/removerange.js';
 import TagCommand from './commands/tag.js';
 import TagsCommand from './commands/tags.js';
 import SearchCommand from './commands/search.js';
@@ -125,6 +126,7 @@ if (config.SPOTIFY_CLIENT_ID !== '' && config.SPOTIFY_CLIENT_SECRET !== '') {
   UndoCommand,
   JoinCommand,
   MoveRangeCommand,
+  RemoveRangeCommand,
   TagCommand,
   TagsCommand,
   SearchCommand,

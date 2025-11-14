@@ -5,20 +5,21 @@ import { TYPES } from "../types.js";
 import PlayerManager from "../managers/player.js";
 import Command from "./index.js";
 import { SlashCommandBuilder } from "@discordjs/builders";
+import { parsePositionArgument } from "../utils/parse-position-argument.js";
+import Player from "../services/player.js";
 
 @injectable()
 export default class implements Command {
   public readonly slashCommand = new SlashCommandBuilder()
     .setName("remove")
-    .setDescription("remove songs from the queue by absolute position")
-    .addIntegerOption((option) =>
+    .setDescription("remove songs from the queue")
+    .addStringOption((option) =>
       option
         .setName("position")
         .setDescription(
-          "absolute position of song to remove (cannot remove currently playing)",
+          "position of song to remove (e.g., 1, next, last, current-1)",
         )
-        .setRequired(true)
-        .setMinValue(1),
+        .setRequired(true),
     )
     .addIntegerOption((option) =>
       option
@@ -45,55 +46,22 @@ export default class implements Command {
       return;
     }
 
-    // Support syntax: !remove from-to (e.g., !remove 5-8)
-    let position: number | undefined;
-    let range: number | undefined;
-
-    const dashedRangeMatch = /^(\d+)-(\d+)$/.exec(positionArg);
-    if (dashedRangeMatch) {
-      const from = parseInt(dashedRangeMatch[1], 10);
-      const to = parseInt(dashedRangeMatch[2], 10);
-
-      if (Number.isNaN(from) || Number.isNaN(to) || from < 1 || to < 1) {
-        await message.channel.send("Positions must be positive numbers.");
-        return;
-      }
-
-      if (to < from) {
-        await message.channel.send(
-          "The end position must be greater than or equal to the start position.",
-        );
-        return;
-      }
-
-      position = from;
-      range = to - from + 1;
-    } else {
-      position = parseInt(positionArg, 10);
-      range = rangeArg ? parseInt(rangeArg, 10) : undefined;
-
-      if (Number.isNaN(position) || position < 1) {
-        await message.channel.send("Position must be a positive number.");
-        return;
-      }
-
-      if (rangeArg && (Number.isNaN(range!) || range! < 1)) {
-        await message.channel.send("Range must be a positive number.");
-        return;
-      }
-    }
-
     const mockInteraction = createMockInteraction(message, {
       options: {
-        getInteger: (name: string) => {
+        getString: (name: string) => {
           if (name === "position") {
-            return position!;
+            return positionArg.toLowerCase();
           }
-
+          return null;
+        },
+        getInteger: (name: string) => {
           if (name === "range") {
-            return range! ?? null;
+            if (rangeArg) {
+              const range = parseInt(rangeArg, 10);
+              return Number.isNaN(range) ? null : range;
+            }
+            return null;
           }
-
           return null;
         },
       },
@@ -106,16 +74,28 @@ export default class implements Command {
   ): Promise<void> {
     const player = await this.playerManager.get(interaction.guild!.id);
 
-    const position = interaction.options.getInteger("position")!;
+    const positionArg = interaction.options.getString("position")!;
     const range = interaction.options.getInteger("range") ?? 1;
 
     try {
-      await player.removeFromQueue(position, range);
+      // Parse position using the same convention as other commands
+      const absolutePosition = parsePositionArgument(positionArg.toLowerCase(), player);
+
+      // Convert absolute position (1-based) to queue-relative position (1-based after current)
+      // removeFromQueue expects queue-relative position (1 = first song after current)
+      const queueRelativePosition = absolutePosition - player.queuePosition;
+
+      // Prevent removing current song (queue-relative position would be 0 or negative if at/before current)
+      if (queueRelativePosition < 1) {
+        throw new Error("Cannot remove the currently playing song or songs from the past.");
+      }
+
+      await player.removeFromQueue(queueRelativePosition, range);
 
       const message =
         range === 1
-          ? `🗑️ Removed song at position ${position}`
-          : `🗑️ Removed ${range} songs starting from position ${position}`;
+          ? `🗑️ Removed song at position ${absolutePosition}`
+          : `🗑️ Removed ${range} songs starting from position ${absolutePosition}`;
 
       await interaction.reply({
         content: message,

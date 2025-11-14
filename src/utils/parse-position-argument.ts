@@ -4,6 +4,20 @@ export const parsePositionArgument = (arg: string, player: Player): number => {
   const queueLength = player.getFullQueueLength();
   const currentQueuePosition = player.queuePosition;
 
+  // Prevent confusion: if arg looks like a dashed range (e.g., "5-8"), reject it
+  // This ensures negative offsets (e.g., "5-2" for position 5 minus 2) are not confused with ranges
+  // Dashed ranges should be handled by separate commands (like moverange)
+  // Only reject if second number >= first number (e.g., "5-8"), not if it's smaller (e.g., "5-2" which is an offset)
+  const dashedRangeMatch = /^(\d+)-(\d+)$/.exec(arg);
+  if (dashedRangeMatch) {
+    const first = parseInt(dashedRangeMatch[1], 10);
+    const second = parseInt(dashedRangeMatch[2], 10);
+    if (second >= first) {
+      throw new Error('Dashed range syntax (e.g., "5-8") is not supported. Use offset syntax (e.g., "5-2" for position 5 minus 2) or a separate range command.');
+    }
+    // If second < first, it's a negative offset, so continue parsing normally
+  }
+
   let basePosition: number | undefined; // 1-based index
   let offset = 0;
 
