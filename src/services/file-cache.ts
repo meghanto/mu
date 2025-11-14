@@ -17,6 +17,10 @@ export default class FileCacheProvider {
     this.config = config;
   }
 
+  public get cacheDir(): string {
+    return this.config.CACHE_DIR;
+  }
+
   /**
    * Returns path to cached file if it exists, otherwise returns null.
    * Updates the `accessedAt` property of the cached file.

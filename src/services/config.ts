@@ -14,6 +14,9 @@ const CONFIG_MAP = {
   YOUTUBE_API_KEY: process.env.YOUTUBE_API_KEY,
   SPOTIFY_CLIENT_ID: process.env.SPOTIFY_CLIENT_ID ?? '',
   SPOTIFY_CLIENT_SECRET: process.env.SPOTIFY_CLIENT_SECRET ?? '',
+  SPOTIFY_USER_ACCESS_TOKEN: process.env.SPOTIFY_USER_ACCESS_TOKEN,
+  SPOTIFY_USER_REFRESH_TOKEN: process.env.SPOTIFY_USER_REFRESH_TOKEN,
+  SPOTIFY_USE_USER_AUTH: process.env.SPOTIFY_USE_USER_AUTH === 'true',
   REGISTER_COMMANDS_ON_BOT: process.env.REGISTER_COMMANDS_ON_BOT === 'true',
   DATA_DIR,
   CACHE_DIR: path.join(DATA_DIR, 'cache'),
@@ -24,6 +27,8 @@ const CONFIG_MAP = {
   BOT_ACTIVITY: process.env.BOT_ACTIVITY ?? 'music',
   ENABLE_SPONSORBLOCK: process.env.ENABLE_SPONSORBLOCK === 'true',
   SPONSORBLOCK_TIMEOUT: process.env.ENABLE_SPONSORBLOCK ?? 5,
+  YT_DLP_COOKIES_FILE: process.env.YT_DLP_COOKIES_FILE,
+  YT_DLP_COOKIES_BROWSER: process.env.YT_DLP_COOKIES_BROWSER,
 } as const;
 
 const BOT_ACTIVITY_TYPE_MAP = {
@@ -33,12 +38,23 @@ const BOT_ACTIVITY_TYPE_MAP = {
   STREAMING: ActivityType.Streaming,
 } as const;
 
+// Optional configuration keys that are allowed to be undefined
+const OPTIONAL_KEYS = [
+  'SPOTIFY_USER_ACCESS_TOKEN',
+  'SPOTIFY_USER_REFRESH_TOKEN',
+  'YT_DLP_COOKIES_FILE',
+  'YT_DLP_COOKIES_BROWSER',
+] as const;
+
 @injectable()
 export default class Config {
   readonly DISCORD_TOKEN!: string;
   readonly YOUTUBE_API_KEY!: string;
   readonly SPOTIFY_CLIENT_ID!: string;
   readonly SPOTIFY_CLIENT_SECRET!: string;
+  readonly SPOTIFY_USER_ACCESS_TOKEN?: string;
+  readonly SPOTIFY_USER_REFRESH_TOKEN?: string;
+  readonly SPOTIFY_USE_USER_AUTH!: boolean;
   readonly REGISTER_COMMANDS_ON_BOT!: boolean;
   readonly DATA_DIR!: string;
   readonly CACHE_DIR!: string;
@@ -49,10 +65,17 @@ export default class Config {
   readonly BOT_ACTIVITY!: string;
   readonly ENABLE_SPONSORBLOCK!: boolean;
   readonly SPONSORBLOCK_TIMEOUT!: number;
+  readonly YT_DLP_COOKIES_FILE?: string;
+  readonly YT_DLP_COOKIES_BROWSER?: string;
 
   constructor() {
     for (const [key, value] of Object.entries(CONFIG_MAP)) {
       if (typeof value === 'undefined') {
+        // Allow optional keys to be undefined
+        if (OPTIONAL_KEYS.includes(key as typeof OPTIONAL_KEYS[number])) {
+          (this as any)[key] = undefined;
+          continue;
+        }
         console.error(`Missing environment variable for ${key}`);
         process.exit(1);
       }
