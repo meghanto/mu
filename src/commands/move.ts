@@ -1,24 +1,43 @@
-import {ChatInputCommandInteraction} from 'discord.js';
-import {inject, injectable} from 'inversify';
-import {TYPES} from '../types.js';
-import PlayerManager from '../managers/player.js';
-import Command from './index.js';
-import {SlashCommandBuilder} from '@discordjs/builders';
+import {
+  ChatInputCommandInteraction,
+  Message,
+  InteractionReplyOptions,
+  MessagePayload,
+} from "discord.js";
+import { inject, injectable } from "inversify";
+import { TYPES } from "../types.js";
+import PlayerManager from "../managers/player.js";
+import Command from "./index.js";
+import { SlashCommandBuilder } from "@discordjs/builders";
+import errorMsg from "../utils/error-msg.js";
+import { parsePositionArgument } from "../utils/parse-position-argument.js";
+import Player from "../services/player.js";
+
+import { createMockInteraction } from "../utils/mock-interaction.js";
 
 @injectable()
 export default class implements Command {
   public readonly slashCommand = new SlashCommandBuilder()
-    .setName('move')
-    .setDescription('move songs within the queue')
-    .addIntegerOption(option =>
-      option.setName('from')
-        .setDescription('position of the song to move')
+    .setName("move")
+    .setDescription("move songs within the queue")
+    .addStringOption((option) =>
+      option
+        .setName("from")
+        .setDescription(
+          "position of the song to move (e.g., 1, current, next-1)",
+        )
         .setRequired(true),
     )
-    .addIntegerOption(option =>
-      option.setName('to')
-        .setDescription('position to move the song to')
-        .setRequired(true));
+    .addStringOption((option) =>
+      option
+        .setName("to")
+        .setDescription(
+          "position to move the song to (e.g., 1, top, next+2, last-1)",
+        )
+        .setRequired(true),
+    );
+
+  public readonly aliases = ["m"];
 
   private readonly playerManager: PlayerManager;
 
@@ -26,22 +45,69 @@ export default class implements Command {
     this.playerManager = playerManager;
   }
 
-  public async execute(interaction: ChatInputCommandInteraction): Promise<void> {
-    const player = this.playerManager.get(interaction.guild!.id);
-
-    const from = interaction.options.getInteger('from') ?? 1;
-    const to = interaction.options.getInteger('to') ?? 1;
-
-    if (from < 1) {
-      throw new Error('position must be at least 1');
+  public async executePrefix(message: Message, args: string[]): Promise<void> {
+    if (args.length < 2) {
+      await message.channel.send(
+        errorMsg('Please provide both "from" and "to" positions.'),
+      );
+      return;
     }
 
-    if (to < 1) {
-      throw new Error('position must be at least 1');
+    const mockInteraction = createMockInteraction(message, {
+      options: {
+        getString: (name: string) => {
+          if (name === "from") {
+            return args[0].toLowerCase();
+          }
+
+          if (name === "to") {
+            return args[1].toLowerCase();
+          }
+
+          return null;
+        },
+      },
+    });
+
+    await this.execute(mockInteraction);
+  }
+
+  public async execute(
+    interaction: ChatInputCommandInteraction,
+  ): Promise<void> {
+    const player = await this.playerManager.get(interaction.guild!.id);
+
+    const fromArg = interaction.options.getString("from")!;
+    const toArg = interaction.options.getString("to")!;
+
+    let from: number;
+    let to: number;
+
+    try {
+      from = parsePositionArgument(fromArg.toLowerCase(), player);
+      to = parsePositionArgument(toArg.toLowerCase(), player);
+    } catch (e: unknown) {
+      throw new Error((e as Error).message); // Re-throw for slash command error handling
     }
 
-    const {title} = player.move(from, to);
+    // Prevent moving songs from the future to the past
+    // Allow moving songs from the past to the future
+    if (from > player.queuePosition && to <= player.queuePosition) {
+      throw new Error(
+        "Cannot move songs from the future to the past.",
+      );
+    }
 
-    await interaction.reply('moved **' + title + '** to position **' + String(to) + '**');
+    // Convert absolute positions to queue-relative positions
+    // For past songs (from <= queuePosition), use negative relative positions
+    const queueRelativeFrom = from - player.queuePosition - 1;
+    const queueRelativeTo = to - player.queuePosition - 1;
+
+    const { title } = await player.move(queueRelativeFrom, queueRelativeTo);
+
+    await interaction.reply({
+      content: `↔️ Moved **${title}** to position **${to}**`,
+      ephemeral: true,
+    });
   }
 }

@@ -1,22 +1,24 @@
-import { ChatInputCommandInteraction, Message } from "discord.js";
+import {
+  ChatInputCommandInteraction,
+  Message,
+  InteractionReplyOptions,
+  MessagePayload,
+} from "discord.js";
 import { SlashCommandBuilder } from "@discordjs/builders";
-import { TYPES } from "../types.js";
 import { inject, injectable } from "inversify";
+import { TYPES } from "../types.js";
 import PlayerManager from "../managers/player.js";
-import { STATUS } from "../services/player.js";
 import Command from "./index.js";
-import { getRandomResponse } from "../utils/random-response.js";
+
 import { createMockInteraction } from "../utils/mock-interaction.js";
 
 @injectable()
 export default class implements Command {
   public readonly slashCommand = new SlashCommandBuilder()
-    .setName("stop")
-    .setDescription(
-      "stop playback, disconnect, and clear all songs in the queue",
-    );
+    .setName("reset-priorities")
+    .setDescription("reset all song priorities in the queue to 1.0 (default)");
 
-  public readonly aliases = ["st"];
+  public readonly aliases = ["rp", "resetp"];
 
   public requiresVC = true;
 
@@ -30,18 +32,20 @@ export default class implements Command {
     await this.execute(createMockInteraction(message));
   }
 
-  public async execute(interaction: ChatInputCommandInteraction) {
+  public async execute(
+    interaction: ChatInputCommandInteraction,
+  ): Promise<void> {
     const player = await this.playerManager.get(interaction.guild!.id);
 
-    if (!player.voiceConnection) {
-      throw new Error("not connected");
+    if (player.isQueueEmpty()) {
+      throw new Error("queue is empty");
     }
 
-    if (player.status !== STATUS.PLAYING) {
-      throw new Error("not currently playing");
-    }
+    const count = await player.resetPriorities();
 
-    await player.stop();
-    await interaction.reply("u betcha, stopped");
+    await interaction.reply({
+      content: `⚖️ Reset priorities for ${count} song${count === 1 ? "" : "s"} to 1.0`,
+      ephemeral: true,
+    });
   }
 }

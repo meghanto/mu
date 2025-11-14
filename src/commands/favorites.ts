@@ -139,7 +139,10 @@ export default class implements Command {
     });
 
     if (favorites.length === 0) {
-      await interaction.reply('there aren\'t any favorites yet');
+      await interaction.reply({
+        content: '📋 No favorites yet. Use `/favorites create` to add one!',
+        ephemeral: true,
+      });
       return;
     }
 
@@ -183,7 +186,10 @@ export default class implements Command {
       },
     });
 
-    await interaction.reply('👍 favorite created');
+    await interaction.reply({
+      content: `✅ Favorite "${name}" created`,
+      ephemeral: true,
+    });
   }
 
   private async remove(interaction: ChatInputCommandInteraction) {
@@ -206,6 +212,9 @@ export default class implements Command {
 
     await prisma.favoriteQuery.delete({where: {id: favorite.id}});
 
-    await interaction.reply('👍 favorite removed');
+    await interaction.reply({
+      content: `✅ Favorite "${name}" removed`,
+      ephemeral: true,
+    });
   }
 }

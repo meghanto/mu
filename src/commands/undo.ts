@@ -4,16 +4,18 @@ import { inject, injectable } from "inversify";
 import { TYPES } from "../types.js";
 import PlayerManager from "../managers/player.js";
 import Command from "./index.js";
-import { prettyTime } from "../utils/time.js";
-import { buildPlayingMessageEmbed } from "../utils/build-embed.js";
 
 @injectable()
-export default class NowPlayingCommand implements Command {
+export default class UndoCommand implements Command {
   public readonly slashCommand = new SlashCommandBuilder()
-    .setName("nowplaying")
-    .setDescription("shows the currently playing song");
+    .setName("undo")
+    .setDescription(
+      "undo the last queue modification (shuffle, clear, move, remove, etc.)",
+    );
 
-  public aliases = ["np"];
+  public aliases = ["u"];
+
+  public requiresVC = true;
 
   private readonly playerManager: PlayerManager;
 
@@ -26,25 +28,48 @@ export default class NowPlayingCommand implements Command {
   ): Promise<void> {
     const player = await this.playerManager.get(interaction.guild!.id);
 
-    if (!player.getCurrent()) {
+    if (!player.canUndo()) {
       await interaction.reply({
-        content: "⏸️ Nothing is currently playing",
+        content: "⚠️ Nothing to undo",
         ephemeral: true,
       });
       return;
     }
 
-    await interaction.reply({ embeds: [buildPlayingMessageEmbed(player)] });
+    const success = await player.undo();
+
+    if (success) {
+      await interaction.reply({
+        content: "↩️ Undone last queue modification",
+        ephemeral: true,
+      });
+    } else {
+      await interaction.reply({
+        content: "❌ Failed to undo",
+        ephemeral: true,
+      });
+    }
   }
 
   public async executePrefix(message: Message): Promise<void> {
     const player = await this.playerManager.get(message.guild!.id);
 
-    if (!player.getCurrent()) {
-      await message.reply("Nothing is currently playing.");
+    if (!player.canUndo()) {
+      await message.reply("⚠️ Nothing to undo");
       return;
     }
 
-    await message.reply({ embeds: [buildPlayingMessageEmbed(player)] });
+    const success = await player.undo();
+
+    if (success) {
+      await message.reply("↩️ Undone last queue modification");
+    } else {
+      await message.reply("❌ Failed to undo");
+    }
   }
 }
+
+
+
+
+
