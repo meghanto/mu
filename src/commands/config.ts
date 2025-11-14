@@ -5,6 +5,7 @@ import errorMsg from '../utils/error-msg.js';
 import {prisma} from '../utils/db.js';
 import Command from './index.js';
 import {getGuildSettings} from '../utils/get-guild-settings.js';
+import {createMockInteraction} from '../utils/mock-interaction.js';
 
 @injectable()
 export default class implements Command {
