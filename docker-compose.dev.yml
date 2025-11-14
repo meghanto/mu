@@ -1,0 +1,16 @@
+services:
+  mu:
+    build: .
+    restart: unless-stopped
+    volumes:
+      - ./data:/data
+      - ./.env.dev:/config:ro
+    environment:
+      - ENV_FILE=/config
+      - DATA_DIR=/data
+    # Uncomment to override individual environment variables
+    # - DISCORD_TOKEN=${DISCORD_TOKEN}
+    # - YOUTUBE_API_KEY=${YOUTUBE_API_KEY}
+    # - SPOTIFY_CLIENT_ID=${SPOTIFY_CLIENT_ID}
+    # - SPOTIFY_CLIENT_SECRET=${SPOTIFY_CLIENT_SECRET}
+

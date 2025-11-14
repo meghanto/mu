@@ -2,9 +2,10 @@
   <img width="250" height="250" src="https://raw.githubusercontent.com/museofficial/muse/master/.github/logo.png">
 </p>
 
-> [!WARNING]
-> I ([@codetheweb](https://github.com/codetheweb)) am no longer the primary maintainer of Muse. **If you use the Docker image, update your image source to `ghcr.io/museofficial/muse`.** We are currently publishing new releases to both `ghcr.io/museofficial/muse` and `codetheweb/muse`, but this may change in the future.
-> Thank you to all the people who stepped up to help maintain Muse!
+> [!NOTE]
+> This is a fork of [museofficial/muse](https://github.com/museofficial/muse). This fork is very WIP and unstable. Slowly working my way up to be a swiss army knife of self hosted discord music bots.
+>
+> For the official Muse, see the [upstream repository](https://github.com/museofficial/muse).
 
 ------
 
@@ -27,68 +28,237 @@ Muse is a **highly-opinionated midwestern self-hosted** Discord music bot **that
 
 ## Running
 
-Muse is written in TypeScript. You can either run Muse with Docker (recommended) or directly with Node.js. Both methods require API keys passed in as environment variables:
-
-- `DISCORD_TOKEN` can be acquired [here](https://discordapp.com/developers/applications) by creating a 'New Application', then going to 'Bot'.
-- `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` can be acquired [here](https://developer.spotify.com/dashboard/applications) with 'Create a Client ID' (Optional).
-- `YOUTUBE_API_KEY` can be acquired by [creating a new project](https://console.developers.google.com) in Google's Developer Console, enabling the YouTube API, and creating an API key under credentials.
-
-Muse will log a URL when run. Open this URL in a browser to invite Muse to your server. Muse will DM the server owner after it's added with setup instructions.
+Muse is written in TypeScript. You can either run Muse with Docker (recommended) or directly with Node.js. Both methods require API keys.
 
 A 64-bit OS is required to run Muse.
 
+### Getting API Keys
+
+Before starting, you'll need to obtain the following API keys:
+
+#### 1. Discord Bot Token (Required)
+
+1. Go to the [Discord Developer Portal](https://discordapp.com/developers/applications)
+2. Click "New Application" and give it a name
+3. Go to the "Bot" section in the left sidebar
+4. Click "Add Bot" and confirm
+5. Under "Token", click "Reset Token" or "Copy" to get your bot token
+6. **Important**: Enable these Privileged Gateway Intents:
+   - ✅ PRESENCE INTENT
+   - ✅ SERVER MEMBERS INTENT
+   - ✅ MESSAGE CONTENT INTENT (if you want prefix commands)
+7. Save your token - you'll need it for `DISCORD_TOKEN`
+
+#### 2. YouTube API Key (Required)
+
+1. Go to [Google Cloud Console](https://console.developers.google.com)
+2. Create a new project (or select an existing one)
+3. Enable the "YouTube Data API v3":
+   - Go to "APIs & Services" > "Library"
+   - Search for "YouTube Data API v3"
+   - Click "Enable"
+4. Create credentials:
+   - Go to "APIs & Services" > "Credentials"
+   - Click "Create Credentials" > "API Key"
+   - Copy your API key
+   - (Optional) Restrict the API key to YouTube Data API v3 for security
+5. Save your API key - you'll need it for `YOUTUBE_API_KEY`
+
+#### 3. Spotify API Credentials (Optional but Recommended)
+
+1. Go to [Spotify Developer Dashboard](https://developer.spotify.com/dashboard/applications)
+2. Click "Create an App"
+3. Fill in the app name and description, accept the terms
+4. Copy your "Client ID" and "Client Secret"
+5. Save these - you'll need them for `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET`
+
+**Note**: Spotify credentials are optional but highly recommended. Without them, you won't be able to play Spotify playlists, albums, or artists directly.
+
 ### Versioning
 
-The `master` branch acts as the developing / bleeding edge branch and is not guaranteed to be stable.
+The `master` branch contains the latest changes from this fork. This fork is experimental and may be unstable.
 
-When running a production instance, I recommend that you use the [latest release](https://github.com/museofficial/muse/releases/).
+For stable releases, use the [upstream repository's releases](https://github.com/museofficial/muse/releases/).
 
 
-### 🐳 Docker
+### 🐳 Docker Compose (Recommended)
 
-There are a variety of image tags available:
-- `:2`: versions >= 2.0.0
-- `:2.1`: versions >= 2.1.0 and < 2.2.0
-- `:2.1.1`: an exact version specifier
-- `:latest`: whatever the latest version is
+This is the easiest way to run the bot. Follow these steps:
 
-(Replace empty config strings with correct values.)
+#### Step 1: Clone the Repository
 
 ```bash
-docker run -it -v "$(pwd)/data":/data -e DISCORD_TOKEN='' -e SPOTIFY_CLIENT_ID='' -e SPOTIFY_CLIENT_SECRET='' -e YOUTUBE_API_KEY='' ghcr.io/museofficial/muse:latest
+git clone https://github.com/meghanto/mu.git
+cd mu
 ```
 
-This starts Muse and creates a data directory in your current directory.
+#### Step 2: Get Your API Keys
 
-You can also store your tokens in an environment file and make it available to your container. By default, the container will look for a `/config` environment file. You can customize this path with the `ENV_FILE` environment variable to use with, for example, [docker secrets](https://docs.docker.com/engine/swarm/secrets/). 
+Follow the instructions above in the [Getting API Keys](#getting-api-keys) section to obtain:
+- Discord Bot Token
+- YouTube API Key
+- Spotify Client ID and Secret (optional)
 
-**Docker Compose**:
+#### Step 3: Create Environment File
 
-```yaml
-services:
-  muse:
-    image: ghcr.io/museofficial/muse:latest
-    restart: always
-    volumes:
-      - ./muse:/data
-    environment:
-      - DISCORD_TOKEN=
-      - YOUTUBE_API_KEY=
-      - SPOTIFY_CLIENT_ID=
-      - SPOTIFY_CLIENT_SECRET=
+Create a `.env.dev` file with your API keys:
+
+```bash
+cp .env.example .env.dev
 ```
+
+Then edit `.env.dev` and add your credentials:
+
+```bash
+# Required
+DISCORD_TOKEN=your_discord_bot_token_here
+YOUTUBE_API_KEY=your_youtube_api_key_here
+
+# Optional but recommended
+SPOTIFY_CLIENT_ID=your_spotify_client_id_here
+SPOTIFY_CLIENT_SECRET=your_spotify_client_secret_here
+```
+
+**Security Note**: `.env.dev` is already in `.gitignore` and won't be committed to git.
+
+#### Step 4: Start with Docker Compose
+
+```bash
+docker-compose -f docker-compose.dev.yml up -d
+```
+
+This will:
+- Build the Docker image
+- Start the bot in the background
+- Mount your `.env.dev` file as the configuration
+- Create a `data` directory for the database and cache
+
+#### Step 5: View Logs
+
+Check that everything is working:
+
+```bash
+docker-compose -f docker-compose.dev.yml logs -f
+```
+
+You should see a URL in the logs. Open this URL in your browser to invite the bot to your Discord server.
+
+#### Step 6: Stop the Bot
+
+When you want to stop the bot:
+
+```bash
+docker-compose -f docker-compose.dev.yml down
+```
+
+To stop and remove all data (database, cache, etc.):
+
+```bash
+docker-compose -f docker-compose.dev.yml down -v
+```
+
+#### Troubleshooting
+
+- **Bot doesn't start**: Check logs with `docker-compose -f docker-compose.dev.yml logs`
+- **Permission errors**: Make sure Docker has permission to access the `data` directory
+- **Port conflicts**: The bot doesn't expose any ports, so this shouldn't be an issue
+
+### 🐳 Docker (Alternative)
+
+> [!NOTE]
+> Docker images are provided by the upstream repository. This fork does not publish Docker images. For Docker usage, see the [upstream repository](https://github.com/museofficial/muse).
+
+If you prefer to use Docker directly instead of Docker Compose:
+
+#### Using .env.dev file:
+
+```bash
+docker build -t mu:latest .
+docker run -d \
+  --name mu \
+  -v "$(pwd)/data":/data \
+  -v "$(pwd)/.env.dev":/config:ro \
+  -e ENV_FILE=/config \
+  --restart unless-stopped \
+  mu:latest
+```
+
+#### Using environment variables directly:
+
+```bash
+docker run -d \
+  --name mu \
+  -v "$(pwd)/data":/data \
+  -e DISCORD_TOKEN='your_token' \
+  -e SPOTIFY_CLIENT_ID='your_id' \
+  -e SPOTIFY_CLIENT_SECRET='your_secret' \
+  -e YOUTUBE_API_KEY='your_key' \
+  --restart unless-stopped \
+  mu:latest
+```
+
+View logs: `docker logs -f mu`  
+Stop: `docker stop mu`  
+Remove: `docker rm mu`
 
 ### Node.js
 
 **Prerequisites**:
 * Node.js (18.17.0 or latest 18.xx.xx is required and latest 18.x.x LTS is recommended) (Version 18 due to opus dependency)
+* Yarn (this project uses Yarn as the package manager)
 * ffmpeg (4.1 or later)
 
-1. `git clone https://github.com/museofficial/muse.git && cd muse`
-2. Copy `.env.example` to `.env` and populate with values
-3. I recommend checking out a tagged release with `git checkout v[latest release]`
-4. `yarn install` (or `npm i`)
-5. `yarn start` (or `npm run start`)
+1. Clone this repository:
+   ```bash
+   git clone https://github.com/meghanto/mu.git && cd mu
+   ```
+
+2. Set up environment variables. You can use either `.env` (for production) or `.env.dev` (for development):
+   
+   For production:
+   ```bash
+   cp .env.example .env
+   ```
+   
+   For development (recommended):
+   ```bash
+   cp .env.example .env.dev
+   ```
+   
+   Then edit your chosen file and add your API keys:
+   - `DISCORD_TOKEN` - Get from [Discord Developer Portal](https://discordapp.com/developers/applications)
+   - `YOUTUBE_API_KEY` - Get from [Google Cloud Console](https://console.developers.google.com)
+   - `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` - Get from [Spotify Developer Dashboard](https://developer.spotify.com/dashboard/applications) (Optional)
+   
+   **Note**: To use `.env.dev` instead of `.env`, set the `ENV_FILE` environment variable:
+   ```bash
+   export ENV_FILE=.env.dev
+   ```
+
+3. Install dependencies:
+   ```bash
+   yarn install
+   ```
+
+4. Generate Prisma client:
+   ```bash
+   yarn prisma:generate
+   ```
+
+5. Run database migrations:
+   ```bash
+   yarn migrations:run
+   ```
+
+6. Start the bot:
+   ```bash
+   yarn start
+   ```
+
+   Or for development with auto-reload:
+   ```bash
+   yarn dev
+   ```
 
 **Note**: if you're on Windows, you may need to manually set the ffmpeg path. See [#345](https://github.com/museofficial/muse/issues/345) for details.
 
