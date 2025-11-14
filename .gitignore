@@ -1,4 +1,71 @@
-data
+# ============================================
+# SENSITIVE DATA & CREDENTIALS
+# ============================================
+
+# Environment variables and secrets
+.env
+.env.*
+.env.local
+.env.*.local
+.env.development
+.env.development.local
+.env.production
+.env.production.local
+.env.test
+.env.test.local
+!.env.example
+!.env.template
+!.env.sample
+
+# API keys, tokens, and credentials
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.cer
+*.der
+*.jks
+*.keystore
+*_rsa
+*_dsa
+*_ecdsa
+*_ed25519
+secrets.json
+credentials.json
+config.local.json
+*.secret
+*.token
+*.auth
+
+# Cookies and session files (sensitive!)
+cookies.txt
+*.cookies
+session.json
+sessions/
+
+# Database files (may contain sensitive data)
+*.db
+*.sqlite
+*.sqlite3
+*.db-shm
+*.db-wal
+data/
+
+# Backup files (may contain sensitive data)
+*.bak
+*.backup
+*.old
+*.orig
+*~
+.#*
+
+# Test files (local development)
+test-commands.js
+
+# ============================================
+# PROJECT FILES
+# ============================================
 .DS_Store
 dist
 dts
@@ -72,10 +139,6 @@ typings/
 
 # Yarn Integrity file
 .yarn-integrity
-
-# dotenv environment variables file
-.env
-.env.test
 
 # parcel-bundler cache (https://parceljs.org/)
 .cache
