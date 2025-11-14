@@ -35,10 +35,22 @@ export default async (guild: Guild): Promise<void> => {
       rest,
       applicationId: client.user!.id,
       guildId: guild.id,
-      commands: container.getAll<Command>(TYPES.Command).map(command => command.slashCommand),
+      commands: container
+        .getAll<Command>(TYPES.Command)
+        .map(command => command.slashCommand),
     });
   }
 
   const owner = await guild.fetchOwner();
-  await owner.send('👋 Hi! Someone (probably you) just invited me to a server you own. By default, I\'m usable by all guild member in all guild channels. To change this, check out the wiki page on permissions: https://github.com/museofficial/muse/wiki/Configuring-Bot-Permissions.');
+  try {
+    await owner.send(
+      '👋 Hi! Someone (probably you) just invited me to a server you own. By default, I\'m usable by all guild member in all guild channels. To change this, check out the wiki page on permissions: https://github.com/museofficial/muse/wiki/Configuring-Bot-Permissions.',
+    );
+  } catch (error: unknown) {
+    // Owner might have DMs disabled, don't crash the bot
+    console.warn(
+      `Could not send welcome message to guild owner ${owner.user.tag} (${guild.id}):`,
+      error instanceof Error ? error.message : String(error),
+    );
+  }
 };
