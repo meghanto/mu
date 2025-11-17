@@ -616,6 +616,13 @@ export default class Player {
         positionSeconds = currentSong.offset;
       }
 
+      // Clean up old audio player before creating a new one
+      // This prevents the old player from triggering onAudioPlayerIdle
+      if (this.audioPlayer) {
+        this.audioPlayer.stop(true);
+        this.audioPlayer.removeAllListeners();
+      }
+
       const stream = await this.getFfmpegInput(currentSong, {
         seek: positionSeconds,
       });
@@ -1585,9 +1592,22 @@ export default class Player {
   }
 
   private async onAudioPlayerIdle(
-    _oldState: AudioPlayerState,
+    oldState: AudioPlayerState,
     newState: AudioPlayerState,
   ): Promise<void> {
+    // Only process idle events if the audio player that went idle is the current one
+    // This prevents old audio players from triggering handlers after being replaced
+    if (this.audioPlayer === null) {
+      return;
+    }
+
+    // Only process transitions from Playing to Idle (natural song end)
+    // Ignore other transitions (e.g., when an old player is replaced)
+    // This prevents old players from triggering handlers after being replaced
+    if (oldState.status !== AudioPlayerStatus.Playing) {
+      return;
+    }
+
     // Automatically advance queued song at end
     if (
       this.loopCurrentSong &&
